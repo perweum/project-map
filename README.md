@@ -97,7 +97,7 @@ Add a `live` section to a map (`discover.py` drafts one) and boxes light up whil
 
 - agents from local Pi and Claude Code session logs: working or idle, the current tool call, an activity feed and today's estimated cost;
 - files appearing in hand-over folders, and review verdicts;
-- systemd timers (next run, last result), open git branches and running processes.
+- systemd timers (next run, last result; Linux only, on macOS those boxes stay blank), open git branches and running processes.
 
 The board listens only on 127.0.0.1 and is read-only. It runs a fixed set of probes and never runs commands from a map.
 It does its work only while a page is open, and redacts secret-looking text in the feed.
