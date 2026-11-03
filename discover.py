@@ -18,7 +18,7 @@ What it finds (read-only, no network):
   edges        script A mentions script B, a generator writes an output, a skill names another skill ...
 Every node carries `source` (the paths it came from); --check compares those with the repo to find drift.
 """
-import argparse, fnmatch, glob, json, os, re, subprocess, sys
+import argparse, collections, fnmatch, glob, json, os, re, subprocess, sys
 
 HOME = os.path.expanduser("~")
 FORMAT_VERSION = 1                                         # map.json format; render_map.py refuses newer maps
@@ -196,6 +196,10 @@ def scan(repo):
         for sf, sid in scripts.items():
             for d in deps(rd(sf, 60000)): users[d] = users.get(d, 0) + 1
         for d, k in users.items(): M.nodes[names[d]]["detail"] += f" Used by {k} script(s)."
+    for key, mid in mods.items():
+        if key.endswith("/"):
+            inner = module_inner(key, mfiles[key], relf)
+            if inner: M.nodes[mid]["inner"] = inner
     # compose services: what runs
     for f in files:
         if not re.match(r"(docker-)?compose[\w.-]*\.ya?ml$", os.path.basename(f)) or "/" in relf[f]: continue
@@ -329,13 +333,77 @@ def scan(repo):
             M.add("h-" + u, "input", u.rstrip("/").split("/")[-1].replace(".git", ""), "git submodule", u, source=[".gitmodules"])
     return M
 
+def inner_of(M, ids, max_outside=8):
+    """The inner map of a merged box: its members, the links between them, and the outside boxes they talk to
+    (as dashed 'outside' boxes, so you can see which member reads or feeds what)."""
+    ids = [i for i in ids if i in M.nodes]; inside = set(ids)
+    nodes = [{k: v for k, v in M.nodes[i].items() if k not in ("x", "y")} for i in ids]
+    edges = [list(e) for e in sorted(M.edges) if e[0] in inside and e[1] in inside]
+    if len(edges) > 2 * len(ids):                           # mentions between siblings: keep the ones that spread out
+        deg = collections.Counter(x for e in edges for x in e[:2]); edges.sort(key=lambda e: deg[e[0]] + deg[e[1]]); edges = sorted(edges[:2 * len(ids)])
+    cross = [e for e in sorted(M.edges) if (e[0] in inside) != (e[1] in inside)]
+    deg = collections.Counter(e[0] if e[1] in inside else e[1] for e in cross)
+    keep = {o for o, _ in deg.most_common(max_outside)}
+    for o in sorted(keep):
+        n = M.nodes[o]
+        nodes.append({"id": o, "kind": n["kind"], "title": n["title"], "sub": "outside this box", "detail": n.get("detail", ""), "outside": True})
+    edges += [list(e) for e in cross if (e[0] if e[1] in inside else e[1]) in keep]
+    return {"nodes": nodes, "edges": edges}
+
+def module_inner(key, fs, relf, cap=16):
+    """Inner map of an app folder: its sub-folders and files, and which imports which (Python and JS relative imports)."""
+    pkg = key.rstrip("/"); items = {}
+    for f in fs:
+        parts = relf[f].split(os.sep)
+        items.setdefault(parts[1] + "/" if len(parts) > 2 else parts[1], []).append(f)
+    if len(items) < 3: return None
+    base = lambda it: it.rstrip("/") if it.endswith("/") else os.path.splitext(it)[0]
+    names = {base(it): it for it in items}
+    PY = re.compile(rf"^\s*from\s+(\.*)({re.escape(pkg)}\.)?(\w+)(?:\.\w+)*\s+import\s+([\w, ()]+)|^\s*import\s+{re.escape(pkg)}\.(\w+)", re.M)
+    JS = re.compile(r"""(?:from|require\(|import\()\s*['"]((?:\./|\.\./)+)([\w.-]+)""")
+    links = collections.Counter()
+    for it, ffs in items.items():
+        for f in ffs[:300]:
+            depth = len(relf[f].split(os.sep)) - 2          # folders below the package
+            got = set()
+            for dots, absp, mod, what, imp in PY.findall(rd(f, 60000)):
+                if imp: got.add(imp); continue
+                if absp or (dots and len(dots) == depth + 1):  # resolves to the package level
+                    got.add(mod)
+                elif not dots and mod == pkg: got |= {w.strip(" ()") for w in what.split(",")}
+                elif dots and len(dots) == depth and mod == "": pass
+            for ups, mod in JS.findall(rd(f, 60000)):
+                if ups.count("../") == depth: got.add(os.path.splitext(mod)[0])
+            for x in got:
+                o = names.get(x)
+                if o and o != it: links[(it, o)] += 1
+    deg = collections.Counter()
+    for (a, b), k in links.items(): deg[a] += k; deg[b] += k
+    order = sorted(items, key=lambda it: (-deg[it], -len(items[it]), it))
+    shown, rest = order[:cap], order[cap:]
+    nid = lambda it: slug("i-" + it)
+    nodes = [{"id": nid(it), "kind": "module", "title": short(it, 26),
+              "sub": f"{len(items[it])} files" if it.endswith("/") else short(describe(items[it][0]) or "file", 36),
+              "detail": short(describe(items[it][0]) if not it.endswith("/") else f"Folder {pkg}/{it}", 240),
+              "source": [f"{pkg}/{it.rstrip('/')}"]} for it in shown]
+    if rest: nodes.append({"id": "i-other", "kind": "module", "title": f"other ({len(rest)})", "sub": "less connected files",
+                           "detail": ", ".join(rest[:40]), "source": [f"{pkg}/{it.rstrip('/')}" for it in rest]})
+    where = lambda it: nid(it) if it in shown else "i-other"
+    strong = sorted(((k, a, b) for (a, b), k in links.items() if a in shown and b in shown), reverse=True)
+    keep = [(a, b) for _, a, b in strong[:2 * len(shown)]]          # the strongest links only: a readable picture
+    return {"nodes": nodes, "edges": [[nid(a), nid(b), "control"] for a, b in sorted(keep)]}
+
 def tidy(M, max_scripts=16):
     """Merge script families (gen_*.py) and unconnected scripts so the map stays readable."""
     linked = {x for e in M.edges for x in e[:2]}
     scripts = [n for n in M.nodes.values() if n["kind"] == "script" and n["id"].startswith("s-")]
     def merge(ids, nid, title, sub):
+        inner = inner_of(M, ids)
+        nid = base = slug(nid); k = 2
+        while nid in M.nodes and nid not in ids: nid = f"{base}-{k}"; k += 1     # never merge into an unrelated box
         keep = M.add(nid, "script", title, sub, f"{len(ids)} scripts: " + ", ".join(M.nodes[i]["title"] for i in ids),
                      source=sorted({s for i in ids for s in M.nodes[i]["source"]}))
+        if keep not in ids: M.nodes[keep]["inner"] = inner
         for i in ids:
             if i == keep: continue
             M.edges = {(keep if a == i else a, keep if b == i else b, k) for a, b, k in M.edges}
@@ -354,15 +422,17 @@ def tidy(M, max_scripts=16):
             m = re.match(r"([a-z]+[_-])", n["title"])
             if m: fam.setdefault((os.path.dirname(n["source"][0]), m.group(1), os.path.splitext(n["title"])[1]), []).append(n["id"])
         for (d, pre, ext), ids in fam.items():
-            if len(ids) >= 3: merge(ids, f"s-{d}/{pre}*", f"{pre}*{ext} ({len(ids)})", f"{d or '.'}/{pre}*{ext}")
+            if len(ids) >= 3: merge(ids, f"s-{d}/{pre}*{ext}", f"{pre}*{ext} ({len(ids)})", f"{d or '.'}/{pre}*{ext}")
     linked = {x for e in M.edges for x in e[:2]}
     loose = [n["id"] for n in M.nodes.values() if n["kind"] == "script" and n["id"] not in linked and n["id"].startswith("s-")]
     if len([n for n in M.nodes.values() if n["kind"] == "script"]) > max_scripts and len(loose) >= 3:
         merge(loose, "s-other", f"other tools ({len(loose)})", "scripts with no detected links")
     ci = [n["id"] for n in M.nodes.values() if n["id"].startswith("ci-") and not any(n["id"] in e[:2] for e in M.edges)]
     if len([n for n in M.nodes.values() if n["id"].startswith("ci-")]) > 6 and len(ci) >= 3:
+        inner = inner_of(M, ci)
         keep = M.add("ci-checks", "service", f"CI checks ({len(ci)})", "workflows with no detected links",
                      "Workflows: " + ", ".join(M.nodes[i]["title"] for i in ci), source=sorted({x for i in ci for x in M.nodes[i]["source"]}))
+        M.nodes[keep]["inner"] = inner
         for i in ci: del M.nodes[i]
     rest = [n for n in M.nodes.values() if n["kind"] == "script" and n["id"] != "s-other"]
     if len(rest) > max_scripts:

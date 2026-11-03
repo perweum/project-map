@@ -26,6 +26,12 @@
   #zoom button { width: 34px; height: 34px; font: 700 16px var(--font); border-radius: 6px; cursor: pointer; padding: 0; }
   .blueprint #zoom button { background: rgba(18,26,41,.92); color: #cfe0ff; border: 1px solid #2c3b55; }
   .factory #zoom button { background: #3a3530; color: #e9dfcf; border: 1px solid #1a1816; }
+  #crumbs { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; flex-wrap: wrap; max-width: calc(100% - 70px); }
+  #crumbs:empty { display: none; }
+  #crumbs button { font: 600 12px var(--font); padding: 5px 10px; border-radius: 5px; cursor: pointer; border: 1px solid #2c3b55; background: rgba(18,26,41,.92); color: #9fb6d8; }
+  #crumbs b { padding: 5px 10px; border-radius: 5px; background: #1d2b44; color: #fff; border: 1px solid #4f7cc0; }
+  #crumbs span { opacity: .5; }
+  .node.outside { opacity: .55; }
   #hint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: rgba(10,14,21,.8); color: #8fa3c4; }
   #bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 4px 28px 0; align-items: start; }
   #feed { max-height: 340px; overflow-y: auto; }
@@ -73,7 +79,7 @@
   <div id="stats"></div>
   <div class="ctl"><span id="hits"></span><input id="search" type="search" placeholder="Search  ( / )" autocomplete="off" aria-label="Search the map"><button id="motion">Motion</button></div>
 </header>
-<div id="wrap"><svg id="map"></svg><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
+<div id="wrap"><svg id="map"></svg><div id="crumbs"></div><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
 <div id="bottom"><div id="info"></div><div id="feed"><h3>ACTIVITY</h3><div style="display:block;opacity:.6;font-family:var(--font)">Static map. Open it through the board (python3 board.py) to see live activity.</div></div></div>
 <div class="legend" id="legend"></div>
 <script>
@@ -93,33 +99,52 @@ const el = (t, a = {}, p = svg) => { const e = document.createElementNS(NS, t); 
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 // ---------------- placement: free grid (x, y in 20 px units) or the older columns/rows ----------------
-const nodes = MAP.nodes.map(n => ({ ...n })), byId = Object.fromEntries(nodes.map(n => [n.id, n]));
-const edges = MAP.edges.map(e => Array.isArray(e) ? { from: e[0], to: e[1], kind: e[2] || "data", label: e[3] } : { kind: "data", ...e });
-const free = nodes.every(n => n.x !== undefined && n.y !== undefined);
-if (!free) {
-  const cols = MAP.columns.map((_, c) => nodes.filter(n => n.col === c));
-  if (!nodes.every(n => n.row !== undefined)) {
-    cols.forEach(cn => cn.forEach((n, i) => n._r = i));
-    for (let it = 0; it < 6; it++) cols.forEach(cn => {
-      cn.forEach(n => { const nb = edges.filter(e => e.from === n.id || e.to === n.id).map(e => byId[e.from === n.id ? e.to : e.from]).filter(m => m.col !== n.col);
-                        n._k = nb.length ? nb.reduce((s, m) => s + m._r, 0) / nb.length : n._r; });
-      cn.sort((a, b) => a._k - b._k).forEach((n, i) => n._r = i);
-    });
-  } else nodes.forEach(n => n._r = n.row);
-  nodes.forEach(n => { n.x = 2 + n.col * 16; n.y = 4 + n._r * 5; });
+let nodes, edges, byId, free, groups, VW, VH, LEVEL = MAP;
+const stack = [];                                        // maps we zoomed out of: [{level, view, title}]
+const topById = Object.fromEntries(MAP.nodes.map(n => [n.id, n]));
+function autoLayout() {                                  // inner maps may leave out x/y: columns by kind, wrapped at 6
+  const order = ["input", "service", "script", "module", "human", "agent", "file", "output"];
+  const inside = nodes.filter(n => !n.outside), outIn = nodes.filter(n => n.outside && edges.some(e => e.from === n.id)),
+        outOut = nodes.filter(n => n.outside && !outIn.includes(n));
+  const cols = [outIn, ...order.map(k => inside.filter(n => n.kind === k)), outOut].filter(c => c.length);
+  let x = 0;
+  for (const ns of cols) { const per = Math.ceil(ns.length / Math.ceil(ns.length / 5));
+    ns.forEach((n, i) => { n.x = x + Math.floor(i / per) * 17; n.y = 2 + (i % per) * 8; });
+    x += Math.ceil(ns.length / per) * 17 + 6; }
+  free = true;
 }
-nodes.forEach(n => { n.px = n.x * U; n.py = n.y * U; });
-const groups = (MAP.groups || []).map((g, i) => { const ms = g.nodes.map(id => byId[id]);
-  return { ...g, i, x: Math.min(...ms.map(m => m.px)) - 20, y: Math.min(...ms.map(m => m.py)) - 34, x2: Math.max(...ms.map(m => m.px + W)) + 20, y2: Math.max(...ms.map(m => m.py + H)) + 20 }; });
-{ // shift everything so the drawing starts at the margin
-  const top = !free && MAP.columns ? 30 : 0;
-  const mx = Math.min(...nodes.map(n => n.px), ...groups.map(g => g.x)), my = Math.min(...nodes.map(n => n.py), ...groups.map(g => g.y));
-  const dx = PAD - mx, dy = PAD + top - my;
-  nodes.forEach(n => { n.px += dx; n.py += dy; }); groups.forEach(g => { g.x += dx; g.x2 += dx; g.y += dy; g.y2 += dy; });
+function load(M) {
+  LEVEL = M;
+  nodes = M.nodes.map(n => ({ ...n })); byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  edges = M.edges.map(e => Array.isArray(e) ? { from: e[0], to: e[1], kind: e[2] || "data", label: e[3] } : { kind: "data", ...e });
+  free = nodes.every(n => n.x !== undefined && n.y !== undefined);
+  if (!free && !M.columns) autoLayout();
+  if (!free) {
+    const cols = M.columns.map((_, c) => nodes.filter(n => n.col === c));
+    if (!nodes.every(n => n.row !== undefined)) {
+      cols.forEach(cn => cn.forEach((n, i) => n._r = i));
+      for (let it = 0; it < 6; it++) cols.forEach(cn => {
+        cn.forEach(n => { const nb = edges.filter(e => e.from === n.id || e.to === n.id).map(e => byId[e.from === n.id ? e.to : e.from]).filter(m => m.col !== n.col);
+                          n._k = nb.length ? nb.reduce((s, m) => s + m._r, 0) / nb.length : n._r; });
+        cn.sort((a, b) => a._k - b._k).forEach((n, i) => n._r = i);
+      });
+    } else nodes.forEach(n => n._r = n.row);
+    nodes.forEach(n => { n.x = 2 + n.col * 16; n.y = 4 + n._r * 5; });
+  }
+  nodes.forEach(n => { n.px = n.x * U; n.py = n.y * U; });
+  groups = (M.groups || []).map((g, i) => { const ms = g.nodes.map(id => byId[id]);
+    return { ...g, i, x: Math.min(...ms.map(m => m.px)) - 20, y: Math.min(...ms.map(m => m.py)) - 34, x2: Math.max(...ms.map(m => m.px + W)) + 20, y2: Math.max(...ms.map(m => m.py + H)) + 20 }; });
+  { // shift everything so the drawing starts at the margin
+    const top = !free && M.columns ? 30 : 0;
+    const mx = Math.min(...nodes.map(n => n.px), ...groups.map(g => g.x)), my = Math.min(...nodes.map(n => n.py), ...groups.map(g => g.y));
+    const dx = PAD - mx, dy = PAD + top - my;
+    nodes.forEach(n => { n.px += dx; n.py += dy; }); groups.forEach(g => { g.x += dx; g.x2 += dx; g.y += dy; g.y2 += dy; });
+  }
+  nodes.forEach(n => n.gmask = groups.filter(g => g.nodes.includes(n.id)).reduce((m, g) => m | (1 << g.i), 0));
+  VW = Math.max(...nodes.map(n => n.px + W), ...groups.map(g => g.x2)) + PAD;
+  VH = Math.max(...nodes.map(n => n.py + H), ...groups.map(g => g.y2)) + PAD;
+  routeAll();
 }
-nodes.forEach(n => n.gmask = groups.filter(g => g.nodes.includes(n.id)).reduce((m, g) => m | (1 << g.i), 0));
-const VW = Math.max(...nodes.map(n => n.px + W), ...groups.map(g => g.x2)) + PAD;
-const VH = Math.max(...nodes.map(n => n.py + H), ...groups.map(g => g.y2)) + PAD;
 
 // ---------------- routing: orthogonal paths on a 10 px lattice that go around boxes ----------------
 // Cost: length, +6 per bend, +4 for running on top of another wire, +1.5 for crossing one,
@@ -191,7 +216,7 @@ function routeAll() {
     pts.push(raw[raw.length - 1]); e.pts = pts;
   }
 }
-routeAll();
+load(MAP);
 function pathD(pts, round) {
   if (!round) return "M" + pts.map(p => p.join(",")).join(" L");
   let d = `M${pts[0][0]},${pts[0][1]}`;
@@ -220,7 +245,7 @@ function render(t) {
     Object.keys(KINDS).map(k => `<linearGradient id="hd-${k}" x1="0" x2="1"><stop offset="0" stop-color="${C(k)}" stop-opacity=".9"/><stop offset="1" stop-color="${C(k)}" stop-opacity=".18"/></linearGradient>`).join("") +
     Object.keys(EDGES).map(k => `<marker id="ar-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="${F ? 13 : 9}" markerHeight="${F ? 13 : 9}" orient="auto"><path d="M0,0L10,5L0,10z" fill="${EC(k)}"/></marker>`).join("");
 
-  if (!free && MAP.columns) MAP.columns.forEach((c, i) => { const xs = nodes.filter(n => n.col === i).map(n => n.px); if (xs.length)
+  if (!free && LEVEL.columns) LEVEL.columns.forEach((c, i) => { const xs = nodes.filter(n => n.col === i).map(n => n.px); if (xs.length)
     el("text", { x: xs[0] + W / 2, y: 30, class: "col", "text-anchor": "middle" }).textContent = c.toUpperCase(); });
 
   groups.forEach(g => {
@@ -260,7 +285,7 @@ function render(t) {
   });
 
   nodes.forEach(n => {
-    const c = C(n.kind), g = el("g", { class: "node", "data-id": n.id, transform: `translate(${n.px},${n.py})` }); n._g = g;
+    const c = C(n.kind), g = el("g", { class: "node" + (n.outside ? " outside" : ""), "data-id": n.id, transform: `translate(${n.px},${n.py})` }); n._g = g;
     if (F) {
       el("rect", { width: W, height: H, rx: 3, fill: "url(#steel)", stroke: "#141210", "stroke-width": 2, filter: "url(#shadow)" }, g);
       el("rect", { x: 2, y: 2, width: W - 4, height: HEAD - 2, fill: n.kind === "human" ? "url(#hazard)" : "#3b3732" }, g);
@@ -283,6 +308,14 @@ function render(t) {
     if (n.new) { el("rect", { x: W - 46, y: H - 18, width: 38, height: 13, rx: 3, fill: "#ffb547" }, g);
                  el("text", { x: W - 27, y: H - 8.5, "text-anchor": "middle", "font-size": 9, "font-weight": 800, fill: "#1a1206" }, g).textContent = "NEW"; }
     el("rect", { class: "hitring", x: -5, y: -5, width: W + 10, height: H + 10, rx: 11, fill: "none", stroke: "#ffe066", "stroke-width": 2.5, opacity: 0 }, g);
+    if (n.outside) el("rect", { x: -3, y: -3, width: W + 6, height: H + 6, rx: 9, fill: "none", stroke: "#8b97ad", "stroke-dasharray": "3 4" }, g);
+    if (n.inner && n.inner.nodes && n.inner.nodes.length) {
+      const k = n.inner.nodes.filter(m => !m.outside).length, o = el("g", { class: "open", transform: `translate(${W - 64},${H - 19})`, style: "cursor:pointer" }, g);
+      el("rect", { width: 56, height: 15, rx: 4, fill: F ? "#e39827" : "#4da3ff", "fill-opacity": F ? 1 : .22, stroke: F ? "#1b1712" : "#4da3ff" }, o);
+      el("text", { x: 28, y: 11, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: F ? "#1b1712" : "#cfe4ff" }, o).textContent = `open · ${k}`;
+      o.addEventListener("click", e => { e.stopPropagation(); if (!dragged) enter(n); });
+      g.addEventListener("dblclick", e => { e.stopPropagation(); enter(n); });
+    }
     n._dot = el("circle", { class: "sdot", cx: W - 12, cy: HEAD / 2, r: 4, fill: STATUS.idle, opacity: last ? 1 : 0 }, g);
     n._live = el("text", { x: tx, y: H - 9, fill: F ? "#e9c88a" : "#7f93b5", "font-size": 10, "font-family": "var(--mono)" }, g);
     g.addEventListener("mouseenter", () => { if (!pts.size) hover(n); });
@@ -300,6 +333,29 @@ function render(t) {
 
 const info = document.getElementById("info");
 function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); showIdle(); applySearch(); }
+// ---------------- zoom into a box: open its inner map; breadcrumb, Backspace or Esc to go back ----------------
+function crumbs() {
+  const c = document.getElementById("crumbs");
+  if (!stack.length) { c.innerHTML = ""; return; }
+  c.innerHTML = stack.map((s, i) => `<button data-up="${stack.length - i}">${esc(s.title)}</button><span>›</span>`).join("") + `<b>${esc(LEVEL.title)}</b>`;
+  c.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); up(+b.dataset.up); });
+}
+function enter(n) {
+  stack.push({ level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title });
+  load({ ...n.inner, title: n.title });
+  pinned = null; sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle();
+  info.innerHTML = `<h3>INSIDE ${esc(n.title.toUpperCase())}</h3>${esc(n.detail || n.sub || "")}\nDashed boxes are outside parts this box connects to. Backspace or the breadcrumb goes back.`;
+}
+function up(k = 1) {
+  if (!stack.length) return;
+  let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
+  load(s.level); pinned = null; sbox.value = ""; hitAt = -1; render(theme);
+  Object.assign(view, s.view); applyView(); crumbs(); showIdle();
+}
+document.addEventListener("keydown", e => {
+  if (document.activeElement === sbox || !stack.length) return;
+  if (e.key === "Backspace" || e.key === "Escape") { e.preventDefault(); up(); }
+});
 // ---------------- search: title, text, model, id; Enter jumps to the next hit, Esc clears, "/" focuses ----------------
 const sbox = document.getElementById("search"), hitsEl = document.getElementById("hits");
 let hits = [], hitAt = -1;
@@ -332,9 +388,10 @@ function hover(n) {
   svg.querySelectorAll(".node").forEach(x => x.classList.toggle("dim", !near.has(x.dataset.id)));
   const inn = edges.filter(e => e.to === n.id).map(e => byId[e.from].title), out = edges.filter(e => e.from === n.id).map(e => byId[e.to].title);
   const st = last?.nodes?.[n.id];
+  const inner = n.inner && n.inner.nodes ? `\n<span style="color:#4da3ff">▸ contains ${n.inner.nodes.filter(m => !m.outside).length} parts: double-click or press “open”</span>` : "";
   info.innerHTML = `<h3>${esc(n.title.toUpperCase())} · ${esc(KINDS[n.kind][0])}${n.model ? " · " + esc(n.model) : ""}</h3>${esc(n.detail || n.sub)}` +
     (inn.length ? `\n<span style="opacity:.65">from:</span> ${esc(inn.join(", "))}` : "") + (out.length ? `\n<span style="opacity:.65">to:</span> ${esc(out.join(", "))}` : "") +
-    (st ? `\n\n<b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}${st.detail ? "\n" + esc(st.detail) : ""}` : "");
+    (st ? `\n\n<b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}${st.detail ? "\n" + esc(st.detail) : ""}` : "") + inner;
 }
 
 // ---------------- pan and zoom: drag with mouse or finger, pinch / Ctrl+wheel / buttons to zoom ----------------
@@ -402,7 +459,7 @@ function apply(s) {
   last = s; document.body.classList.add("live");
   for (const n of nodes) {
     const st = s.nodes[n.id] || { status: "idle", line: "" };
-    n._g.setAttribute("class", `node status-${st.status}`);
+    n._g.setAttribute("class", `node status-${st.status}${n.outside ? " outside" : ""}`);
     n._dot.setAttribute("fill", STATUS[st.status] || STATUS.idle); n._dot.setAttribute("opacity", 1);
     const line = st.line || ""; n._live.textContent = line.length > 36 ? line.slice(0, 35) + "…" : line;
     n._live.setAttribute("fill", st.status === "idle" ? (theme === "factory" ? "#a89a86" : "#5f7090") : STATUS[st.status]);
@@ -416,10 +473,10 @@ function apply(s) {
     (t.cost_today !== undefined ? `<span class="chip">today ≈ <b>$${t.cost_today.toFixed(2)}</b></span>` : "") +
     (t.other_active ? `<span class="chip">${t.other_active} other session(s) active</span>` : "") +
     driftChip(t.drift || MAP.drift) + `<span class="chip">updated ${new Date(s.time * 1000).toLocaleTimeString([], { hour12: false })}</span>`;
-  const title = id => byId[id]?.title || id;
+  const title = id => topById[id]?.title || id;
   document.getElementById("feed").innerHTML = "<h3>ACTIVITY</h3>" + ((s.feed || []).slice(0, 16).map(f =>
     `<div><span style="opacity:.6">${new Date(f.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>` +
-    `<span style="color:${byId[f.node] ? KINDS[byId[f.node].kind][theme === "factory" ? 2 : 1] : "#8b97ad"}">${esc(title(f.node))}</span><span title="${esc(f.text)}">${esc(f.text)}</span></div>`).join("") ||
+    `<span style="color:${topById[f.node] ? KINDS[topById[f.node].kind][theme === "factory" ? 2 : 1] : "#8b97ad"}">${esc(title(f.node))}</span><span title="${esc(f.text)}">${esc(f.text)}</span></div>`).join("") ||
     `<div style="display:block;opacity:.6">Nothing in the last 24 hours.</div>`);
 }
 async function poll() {

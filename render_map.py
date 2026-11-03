@@ -75,6 +75,30 @@ for g in M.get("groups", []):
         gx, gy, gx2, gy2 = min(b[0] for b in bs) - 20, min(b[1] for b in bs) - 34, max(b[2] for b in bs) + 20, max(b[3] for b in bs) + 20
         inside = [n["id"] for n in nodes if n["id"] not in g["nodes"] and box(n)[0] < gx2 and box(n)[2] > gx and box(n)[1] < gy2 and box(n)[3] > gy]
         if inside: warns.append(f"group {g['label']!r} frame also covers {inside}: move them or add them to the group")
+def check_inner(n, path, depth=1):
+    """`inner` = a smaller map shown when the box is opened: nodes, edges, groups; x/y optional (auto layout)."""
+    inn = n.get("inner")
+    if inn is None: return
+    where = f"{path} > inner"
+    if not isinstance(inn, dict) or not isinstance(inn.get("nodes"), list) or not inn["nodes"]:
+        errs.append(f"{where}: needs a non-empty `nodes` list"); return
+    if depth > 4: errs.append(f"{where}: nested deeper than 4 levels"); return
+    seen = set(); xy = [("x" in m and "y" in m) for m in inn["nodes"]]
+    if any(xy) and not all(xy): errs.append(f"{where}: give x/y to every inner node or to none (automatic layout)")
+    for m in inn["nodes"]:
+        i = m.get("id")
+        if not i or i in seen: errs.append(f"{where}: node id missing or duplicate: {i!r}")
+        seen.add(i)
+        if m.get("kind") not in KINDS: errs.append(f"{where} {i}: kind {m.get('kind')!r} not in {sorted(KINDS)}")
+        if not m.get("title"): errs.append(f"{where} {i}: title missing")
+        check_inner(m, f"{where} {i}", depth + 1)
+    for e in inn.get("edges", []):
+        f, t, k = (e + [None, None, "data"])[:3] if isinstance(e, list) else (e.get("from"), e.get("to"), e.get("kind", "data"))
+        if f not in seen or t not in seen: errs.append(f"{where}: edge {f}->{t} names an unknown node")
+        if k not in EDGE_KINDS: errs.append(f"{where}: edge {f}->{t} kind {k!r} not in {sorted(EDGE_KINDS)}")
+    for g in inn.get("groups", []):
+        if [x for x in g.get("nodes", []) if x not in seen]: errs.append(f"{where}: group {g.get('label')!r} names an unknown node")
+for n in nodes: check_inner(n, n.get("id"))
 live = M.get("live") or {}
 for kind in ("sessions", "files", "units", "git", "process"):
     for r in live.get(kind, []):

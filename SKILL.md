@@ -52,6 +52,9 @@ Format reference:
  "groups": [{"label": "Generators", "nodes": ["gens"], "kind": "script"}],
  "ignore": [], "live": {}}
 ```
+**Inner maps:** discover.py gives merged boxes and app folders an `inner` map (shown when the box is opened). Keep them
+when you tidy; you may rename their boxes or drop noise inside. To give a hand-made box detail, add
+`"inner": {"nodes": [...], "edges": [...]}` (x/y optional; `"outside": true` for boxes from the level above).
 `version` is the map format (currently 1); keep it, and never raise it by hand.
 Node kinds: `input`, `script`, `service` (CI, timers, containers), `module` (app code), `agent` (a model, costs tokens),
 `human`, `file` (hand-over file or folder), `output`. Edge kinds: `data`, `control` (starts/calls), `human`, `feedback`.

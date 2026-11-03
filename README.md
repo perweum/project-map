@@ -40,6 +40,11 @@ This is what the raw draft looks like for [fastapi/fastapi](https://github.com/f
 
 Large projects stay readable: script families (`gen_*.py`), sub-folders and rarely used scripts are merged into one box each.
 
+**Zoom into a box.** Merged boxes and app folders carry an inner map. Press **open** on the box, or double-click it, to see its
+parts: the scripts in a family with the outside boxes each one reads or feeds (dashed), or the files and sub-folders of an app
+folder and which imports which. A breadcrumb (or Backspace) takes you back out. Inner maps can be nested, and you can write
+your own with an `inner` field on any box.
+
 ## Keeping a map up to date
 
 ```bash
@@ -92,6 +97,7 @@ See `SKILL.md` for the `live` format.
 }
 ```
 
+Any box can have an `inner` map (`nodes`, `edges`, optional `groups`; `x`/`y` optional, laid out automatically; `"outside": true` marks a box from the level above).
 Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` and `output`. Edge kinds are `data`, `control`, `human` and `feedback`.
 `version` is the format version (currently 1); maps without it are read as version 1, and a renderer refuses maps newer than it understands.
 `x`/`y` are grid units of 20 px. Wires are routed around boxes automatically. `render_map.py` rejects invalid maps with a list of problems.
@@ -100,7 +106,7 @@ Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` 
 
 - [x] Automatic discovery, drift check, live agent board
 - [x] Search box
-- [ ] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
+- [x] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
 - [ ] Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
 - [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
 - [ ] Assets view: which images, fonts and icons a project uses and where they come from
