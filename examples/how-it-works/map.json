@@ -1,0 +1,33 @@
+{
+ "title": "project-map: how it works",
+ "subtitle": "scan a repo → draft map → tidy (by hand or with an agent) → interactive page → optional live board",
+ "nodes": [
+  {"id": "repo", "x": 0, "y": 4, "kind": "input", "title": "Your repository", "sub": "scripts, CI, app code, data", "detail": "Any git repository. Nothing is uploaded; everything runs locally."},
+  {"id": "env", "x": 0, "y": 10, "kind": "input", "title": "Agent skills & timers", "sub": "skills, systemd timers, cron", "detail": "Agent skills that mention the project, and scheduled jobs that run it."},
+  {"id": "logs", "x": 0, "y": 22, "kind": "input", "title": "Agent session logs", "sub": "Pi and Claude Code (local)", "detail": "Read by the live board to see which agent is working and on what."},
+
+  {"id": "discover", "x": 20, "y": 4, "kind": "script", "title": "discover.py", "sub": "finds the parts and links", "detail": "Standard library only. Finds scripts, commands, CI, timers, app modules, agents, hand-over folders, inputs and generated outputs."},
+  {"id": "draft", "x": 20, "y": 10, "kind": "file", "title": "map.json", "sub": "boxes, links, zones, sources", "detail": "Plain JSON you can edit. Every box remembers the files it came from, which is how drift is detected."},
+  {"id": "render", "x": 20, "y": 16, "kind": "script", "title": "render_map.py", "sub": "validates and builds the page", "detail": "Rejects broken maps with a list of problems, then writes one self-contained HTML file."},
+  {"id": "board", "x": 20, "y": 22, "kind": "service", "title": "board.py", "sub": "local live server, read-only", "detail": "Serves your maps on 127.0.0.1 and colours boxes from session logs, files, timers and git."},
+
+  {"id": "you", "x": 40, "y": 4, "kind": "human", "title": "You", "sub": "drag, rename, group", "detail": "Tidy the draft by hand: titles, zones, positions."},
+  {"id": "agent", "x": 40, "y": 10, "kind": "agent", "title": "Coding agent", "sub": "skill: SKILL.md", "model": "any (Pi, Claude Code …)", "detail": "With SKILL.md an agent runs discover.py, then names things, groups zones and writes the descriptions."},
+
+  {"id": "html", "x": 60, "y": 10, "kind": "output", "title": "map.html", "sub": "pan, zoom, hover details", "detail": "Open in any browser, phone included. Share it, attach it to a PR, put a screenshot in your README."},
+  {"id": "live", "x": 60, "y": 22, "kind": "output", "title": "Live board", "sub": "who is working, on what", "detail": "Boxes glow while an agent works; an activity feed and today's estimated cost."},
+  {"id": "drift", "x": 60, "y": 16, "kind": "output", "title": "Drift warnings", "sub": "the map no longer matches", "detail": "New scripts or workflows that are not on the map, and boxes whose files are gone."}
+ ],
+ "edges": [
+  ["repo", "discover", "data"], ["env", "discover", "data"], ["discover", "draft", "data"],
+  ["you", "draft", "human"], ["agent", "discover", "control"], ["agent", "draft", "control"],
+  ["draft", "render", "data"], ["render", "html", "data"], ["render", "drift", "data"], ["discover", "drift", "feedback"],
+  ["logs", "board", "data"], ["draft", "board", "data"], ["board", "live", "data"], ["you", "agent", "human"]
+ ],
+ "groups": [
+  {"label": "Inputs", "nodes": ["repo", "env", "logs"], "kind": "input"},
+  {"label": "Toolkit", "nodes": ["discover", "draft", "render", "board"], "kind": "script"},
+  {"label": "Tidy", "nodes": ["you", "agent"], "kind": "agent"},
+  {"label": "What you get", "nodes": ["html", "drift", "live"], "kind": "output"}
+ ]
+}

@@ -1,0 +1,410 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project map</title>
+<style>
+  :root { --font: system-ui, "Segoe UI", sans-serif; --mono: ui-monospace, "JetBrains Mono", monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); min-height: 100vh; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 28px 4px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 18px; letter-spacing: .02em; } .sub { margin: 4px 0 0; font-size: 12px; opacity: .7; }
+  #stats { display: flex; gap: 8px; flex-wrap: wrap; } .chip { font: 600 11px var(--font); padding: 5px 10px; border-radius: 999px; letter-spacing: .04em; }
+  .chip b { font-weight: 800; } .chip .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .ctl button { font: 600 11px var(--font); letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; margin-left: 4px;
+                border-radius: 4px; cursor: pointer; border: 1px solid; background: transparent; }
+  #wrap { position: relative; margin: 0 12px; overflow: hidden; touch-action: none; cursor: grab; border-radius: 8px;
+          user-select: none; -webkit-user-select: none; } #wrap.drag { cursor: grabbing; }
+  svg { width: 100%; height: 100%; display: block; }
+  #zoom { position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+  #zoom button { width: 34px; height: 34px; font: 700 16px var(--font); border-radius: 6px; cursor: pointer; padding: 0; }
+  .blueprint #zoom button { background: rgba(18,26,41,.92); color: #cfe0ff; border: 1px solid #2c3b55; }
+  .factory #zoom button { background: #3a3530; color: #e9dfcf; border: 1px solid #1a1816; }
+  #hint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: rgba(10,14,21,.8); color: #8fa3c4; }
+  #bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 4px 28px 0; align-items: start; }
+  #feed { max-height: 340px; overflow-y: auto; }
+  @media (max-width: 900px) { #bottom { grid-template-columns: minmax(0, 1fr); margin: 4px 12px 0; } header { padding: 14px 14px 4px; } .legend { padding: 12px 14px 24px; } }
+  #info, #feed { font-size: 12.5px; padding: 12px 14px; border-radius: 6px; min-height: 120px; }
+  #info { white-space: pre-line; } #feed h3, #info h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .14em; opacity: .7; }
+  #feed div { display: grid; grid-template-columns: 42px minmax(0, 110px) minmax(0, 1fr); gap: 8px; padding: 2px 0; font-family: var(--mono); font-size: 11.5px; }
+  #feed span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; padding: 12px 28px 24px; opacity: .85; }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .dim { opacity: .12; transition: opacity .15s; }
+  .flow { animation: flow 1.1s linear infinite; } .flow.slow { animation-duration: 2.2s; }
+  @keyframes flow { to { stroke-dashoffset: -20; } }
+  .live .edge:not(.active) .flow { animation: none; opacity: 0; }
+  .live .edge.active .flow { animation-duration: .55s; }
+  .live .edge.active path:nth-child(2) { stroke-opacity: 1; stroke-width: 2.4; }
+  .status-working .glow { animation: pulse 1.1s ease-in-out infinite; } .status-working .sdot { animation: pulse .8s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .2; } }
+  body.clean #bottom, body.clean #zoom, body.clean #hint, body.clean .ctl { display: none !important; }
+  body.still .flow, body.still .glow, body.still .sdot { animation: none !important; }
+  @media (prefers-reduced-motion: reduce) { .flow, .glow, .sdot { animation: none !important; } }
+
+  body.blueprint { background-color: #0a0e15; color: #d8e1f0;
+    background-image: linear-gradient(rgba(120,160,220,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,220,.07) 1px, transparent 1px),
+                      linear-gradient(rgba(120,160,220,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,220,.025) 1px, transparent 1px);
+    background-size: 160px 160px, 160px 160px, 20px 20px, 20px 20px; }
+  .blueprint .ctl button { color: #9fb6d8; border-color: #2c3b55; } .blueprint .ctl button.on { background: #1d2b44; color: #fff; border-color: #4f7cc0; }
+  .blueprint #info, .blueprint #feed { background: rgba(18,25,38,.88); border: 1px solid #23324b; }
+  .blueprint .chip { background: #121a29; border: 1px solid #263552; color: #b9c7de; }
+  .blueprint .col { fill: #6f86ab; font: 600 11px var(--font); letter-spacing: .18em; }
+
+  body.factory { background-color: #262320; color: #e9dfcf;
+    background-image: linear-gradient(rgba(0,0,0,.28) 2px, transparent 2px), linear-gradient(90deg, rgba(0,0,0,.28) 2px, transparent 2px),
+                      radial-gradient(circle at 30% 20%, rgba(255,200,120,.05), transparent 60%), radial-gradient(circle at 80% 90%, rgba(0,0,0,.25), transparent 50%);
+    background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%; }
+  .factory h1 { text-transform: uppercase; letter-spacing: .12em; color: #ffcc66; }
+  .factory .ctl button { color: #e9dfcf; border-color: #5a524a; background: #3a3530; } .factory .ctl button.on { background: #e39827; color: #1b1712; border-color: #ffbf55; }
+  .factory #info, .factory #feed { background: #33302c; border: 2px solid #1a1816; box-shadow: inset 0 1px 0 #4a453f; }
+  .factory .chip { background: #3a3530; border: 1px solid #1a1816; color: #e9dfcf; border-radius: 3px; }
+  .factory .col { fill: #c9a26a; font: 700 11px var(--font); letter-spacing: .2em; }
+</style></head>
+<body class="blueprint">
+<header>
+  <div><h1 id="title"></h1><p class="sub" id="subtitle"></p></div>
+  <div id="stats"></div>
+  <div class="ctl"><button id="motion">Motion</button></div>
+</header>
+<div id="wrap"><svg id="map"></svg><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
+<div id="bottom"><div id="info"></div><div id="feed"><h3>ACTIVITY</h3><div style="display:block;opacity:.6;font-family:var(--font)">Static map. Open it through the board (python3 board.py) to see live activity.</div></div></div>
+<div class="legend" id="legend"></div>
+<script>
+const MAP = /*MAP_DATA*/null;
+const KINDS = {   // kind: [label, blueprint colour, factory colour, icon]
+  input:  ["input / source", "#b48cff", "#9c7bd1", "▶"],  script: ["script (free)", "#5fe08a", "#7fb04a", "⚙"],
+  agent:  ["model agent (tokens)", "#4da3ff", "#4aa3df", "◆"], human: ["you", "#ffb547", "#f2b134", "●"],
+  file:   ["file / contract", "#8b97ad", "#8f8478", "▤"],  output: ["output", "#3fd9e6", "#d9774a", "■"],
+  service:["service / timer", "#f06fb0", "#c75b8f", "⏻"], module: ["app code", "#ff8f6b", "#d9774a", "▣"],
+};
+const EDGES = { data: ["data", "#5fe08a", "#e8c547"], control: ["control", "#4da3ff", "#d9534f"],
+                human: ["you act", "#ffb547", "#f2b134"], feedback: ["feedback", "#b48cff", "#4aa3df"] };
+const STATUS = { working: "#5fe08a", waiting: "#ffb547", failed: "#ff5c6c", done: "#4da3ff", idle: "#56607a" };
+const U = 20, W = 220, H = 80, HEAD = 24, G = 10, PAD = 40;
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map");
+const el = (t, a = {}, p = svg) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); p.appendChild(e); return e; };
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// ---------------- placement: free grid (x, y in 20 px units) or the older columns/rows ----------------
+const nodes = MAP.nodes.map(n => ({ ...n })), byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+const edges = MAP.edges.map(e => Array.isArray(e) ? { from: e[0], to: e[1], kind: e[2] || "data", label: e[3] } : { kind: "data", ...e });
+const free = nodes.every(n => n.x !== undefined && n.y !== undefined);
+if (!free) {
+  const cols = MAP.columns.map((_, c) => nodes.filter(n => n.col === c));
+  if (!nodes.every(n => n.row !== undefined)) {
+    cols.forEach(cn => cn.forEach((n, i) => n._r = i));
+    for (let it = 0; it < 6; it++) cols.forEach(cn => {
+      cn.forEach(n => { const nb = edges.filter(e => e.from === n.id || e.to === n.id).map(e => byId[e.from === n.id ? e.to : e.from]).filter(m => m.col !== n.col);
+                        n._k = nb.length ? nb.reduce((s, m) => s + m._r, 0) / nb.length : n._r; });
+      cn.sort((a, b) => a._k - b._k).forEach((n, i) => n._r = i);
+    });
+  } else nodes.forEach(n => n._r = n.row);
+  nodes.forEach(n => { n.x = 2 + n.col * 16; n.y = 4 + n._r * 5; });
+}
+nodes.forEach(n => { n.px = n.x * U; n.py = n.y * U; });
+const groups = (MAP.groups || []).map((g, i) => { const ms = g.nodes.map(id => byId[id]);
+  return { ...g, i, x: Math.min(...ms.map(m => m.px)) - 20, y: Math.min(...ms.map(m => m.py)) - 34, x2: Math.max(...ms.map(m => m.px + W)) + 20, y2: Math.max(...ms.map(m => m.py + H)) + 20 }; });
+{ // shift everything so the drawing starts at the margin
+  const top = !free && MAP.columns ? 30 : 0;
+  const mx = Math.min(...nodes.map(n => n.px), ...groups.map(g => g.x)), my = Math.min(...nodes.map(n => n.py), ...groups.map(g => g.y));
+  const dx = PAD - mx, dy = PAD + top - my;
+  nodes.forEach(n => { n.px += dx; n.py += dy; }); groups.forEach(g => { g.x += dx; g.x2 += dx; g.y += dy; g.y2 += dy; });
+}
+nodes.forEach(n => n.gmask = groups.filter(g => g.nodes.includes(n.id)).reduce((m, g) => m | (1 << g.i), 0));
+const VW = Math.max(...nodes.map(n => n.px + W), ...groups.map(g => g.x2)) + PAD;
+const VH = Math.max(...nodes.map(n => n.py + H), ...groups.map(g => g.y2)) + PAD;
+
+// ---------------- routing: orthogonal paths on a 10 px lattice that go around boxes ----------------
+// Cost: length, +6 per bend, +4 for running on top of another wire, +1.5 for crossing one,
+// +2 per step inside a zone that neither end belongs to (keeps zones readable).
+function routeAll() {
+  const C = Math.floor(VW / G) + 1, R = Math.floor(VH / G) + 1, N = C * R, id = (i, j) => j * C + i;
+  const blocked = new Uint8Array(N), gm = new Int32Array(N), useH = new Uint8Array(N), useV = new Uint8Array(N);
+  for (const n of nodes) for (let i = Math.ceil((n.px - 8) / G); i <= Math.floor((n.px + W + 8) / G); i++)
+    for (let j = Math.ceil((n.py - 8) / G); j <= Math.floor((n.py + H + 8) / G); j++) if (i >= 0 && j >= 0 && i < C && j < R) blocked[id(i, j)] = 1;
+  for (const g of groups) for (let i = Math.ceil(g.x / G); i <= Math.floor(g.x2 / G); i++)
+    for (let j = Math.ceil(g.y / G); j <= Math.floor(g.y2 / G); j++) if (i >= 0 && j >= 0 && i < C && j < R) gm[id(i, j)] |= 1 << g.i;
+  const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1];
+  const edgeZ = new Uint8Array(N);   // lattice points on or next to a zone border: wires should cross it, not run along it
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) { const q = id(i, j);
+    for (let d = 0; d < 4; d++) { const ii = i + DX[d] * 1, jj = j + DY[d] * 1;
+      if (ii >= 0 && jj >= 0 && ii < C && jj < R && gm[id(ii, jj)] !== gm[q]) { edgeZ[q] = 1; break; } } }
+  // sides: 0 right, 1 bottom, 2 left, 3 top; horizontal when the boxes are clearly side by side
+  const sideOf = (n, m) => { const dx = (m.px - n.px), dy = (m.py - n.py); return Math.abs(dx) >= W * 0.8 ? (dx > 0 ? 0 : 2) : (dy > 0 ? 1 : 3); };
+  const slots = {};
+  edges.forEach(e => { const a = byId[e.from], b = byId[e.to]; e.sa = sideOf(a, b); e.sb = sideOf(b, a);
+    (slots[a.id + e.sa] ||= []).push([e, "a", b]); (slots[b.id + e.sb] ||= []).push([e, "b", a]); });
+  for (const k in slots) {
+    const list = slots[k], s = k.slice(-1) | 0, n = byId[k.slice(0, -1)], vert = s === 0 || s === 2;
+    list.sort((p, q) => vert ? p[2].py - q[2].py : p[2].px - q[2].px);
+    list.forEach(([e, end], i) => {
+      const t = (i + 1) / (list.length + 1);
+      const x = s === 0 ? n.px + W : s === 2 ? n.px : n.px + Math.round(t * W / G) * G;
+      const y = s === 1 ? n.py + H : s === 3 ? n.py : n.py + Math.round((12 + t * (H - 24)) / G) * G;
+      e["p" + end] = [x, y]; e["s" + end + "pt"] = [x + DX[s] * 2 * G, y + DY[s] * 2 * G];
+    });
+  }
+  const dist = new Float64Array(N * 4), prev = new Int32Array(N * 4);
+  function astar(e) {
+    const a = byId[e.from], b = byId[e.to], allow = a.gmask | b.gmask;
+    const si = Math.round(e.sapt[0] / G), sj = Math.round(e.sapt[1] / G), ti = Math.round(e.sbpt[0] / G), tj = Math.round(e.sbpt[1] / G);
+    const start = id(si, sj), goal = id(ti, tj), inward = (e.sb + 2) % 4;
+    dist.fill(Infinity); prev.fill(-1);
+    const heap = []; const push = (f, s) => { heap.push([f, s]); let c = heap.length - 1; while (c) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c;
+      if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return top; };
+    const s0 = start * 4 + e.sa; dist[s0] = 0; push(0, s0);
+    let found = -1;
+    while (heap.length) {
+      const [f, s] = pop(), p = s >> 2, d = s & 3, g = dist[s];
+      if (f - (Math.abs(p % C - ti) + Math.abs(((p / C) | 0) - tj)) > g + 1e-9) continue;
+      if (p === goal) { found = s; break; }
+      for (const nd of [d, (d + 1) % 4, (d + 3) % 4]) {
+        const i = p % C + DX[nd], j = ((p / C) | 0) + DY[nd];
+        if (i < 0 || j < 0 || i >= C || j >= R) continue;
+        const q = id(i, j); if (blocked[q] && q !== goal) continue;
+        const h = nd % 2 === 0;
+        let c = 1 + (nd !== d ? 6 : 0) + (h ? useH[q] * 4 + useV[q] * 1.5 : useV[q] * 4 + useH[q] * 1.5) + ((gm[q] & ~allow) ? 2 : 0) + (edgeZ[q] && nd === d ? 2.5 : 0);
+        if (q === goal && nd !== inward) c += 6;
+        const ns = q * 4 + nd;
+        if (g + c < dist[ns]) { dist[ns] = g + c; prev[ns] = s; push(g + c + Math.abs(i - ti) + Math.abs(j - tj), ns); }
+      }
+    }
+    if (found < 0) return [e.pa, e.pb];
+    const pts = []; for (let s = found; s >= 0; s = prev[s]) { const p = s >> 2; pts.push([(p % C) * G, ((p / C) | 0) * G]); }
+    pts.reverse();
+    for (let k = 1; k < pts.length; k++) { const q = id(pts[k][0] / G, pts[k][1] / G); if (pts[k][1] === pts[k - 1][1]) useH[q] = 1; else useV[q] = 1; }
+    return [e.pa, ...pts, e.pb];
+  }
+  const order = [...edges].sort((p, q) => (Math.abs(p.sapt[0] - p.sbpt[0]) + Math.abs(p.sapt[1] - p.sbpt[1])) - (Math.abs(q.sapt[0] - q.sbpt[0]) + Math.abs(q.sapt[1] - q.sbpt[1])));
+  for (const e of order) {
+    const raw = astar(e), pts = [raw[0]];
+    for (let k = 1; k < raw.length - 1; k++) { const [a, b, c] = [pts[pts.length - 1], raw[k], raw[k + 1]];
+      if (!((a[0] === b[0] && b[0] === c[0]) || (a[1] === b[1] && b[1] === c[1]))) pts.push(b); }
+    pts.push(raw[raw.length - 1]); e.pts = pts;
+  }
+}
+routeAll();
+function pathD(pts, round) {
+  if (!round) return "M" + pts.map(p => p.join(",")).join(" L");
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let k = 1; k < pts.length - 1; k++) {
+    const [p, c, n] = [pts[k - 1], pts[k], pts[k + 1]], l1 = Math.hypot(c[0] - p[0], c[1] - p[1]), l2 = Math.hypot(n[0] - c[0], n[1] - c[1]);
+    const r = Math.min(12, l1 / 2, l2 / 2), a = [c[0] + (p[0] - c[0]) / l1 * r, c[1] + (p[1] - c[1]) / l1 * r], b = [c[0] + (n[0] - c[0]) / l2 * r, c[1] + (n[1] - c[1]) / l2 * r];
+    d += ` L${a[0]},${a[1]} Q${c[0]},${c[1]} ${b[0]},${b[1]}`;
+  }
+  return d + ` L${pts[pts.length - 1][0]},${pts[pts.length - 1][1]}`;
+}
+
+// ---------------- drawing ----------------
+let theme = "blueprint", last = null;
+function render(t) {
+  theme = t;
+  document.body.className = [t, document.body.classList.contains("still") ? "still" : "", document.body.classList.contains("clean") ? "clean" : "", last ? "live" : ""].join(" ");
+  document.querySelectorAll(".ctl [data-theme]").forEach(b => b.classList.toggle("on", b.dataset.theme === t));
+  svg.innerHTML = "";
+  const F = t === "factory", C = k => KINDS[k][F ? 2 : 1], EC = k => EDGES[k][F ? 2 : 1];
+  el("defs").innerHTML = `
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>
+    <filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#000" flood-opacity=".55"/></filter>
+    <pattern id="hazard" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="12" fill="#1b1712"/><rect width="6" height="12" fill="#f2b134"/></pattern>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4641"/><stop offset="1" stop-color="#2f2c29"/></linearGradient>` +
+    Object.keys(KINDS).map(k => `<linearGradient id="hd-${k}" x1="0" x2="1"><stop offset="0" stop-color="${C(k)}" stop-opacity=".9"/><stop offset="1" stop-color="${C(k)}" stop-opacity=".18"/></linearGradient>`).join("") +
+    Object.keys(EDGES).map(k => `<marker id="ar-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="${F ? 13 : 9}" markerHeight="${F ? 13 : 9}" orient="auto"><path d="M0,0L10,5L0,10z" fill="${EC(k)}"/></marker>`).join("");
+
+  if (!free && MAP.columns) MAP.columns.forEach((c, i) => { const xs = nodes.filter(n => n.col === i).map(n => n.px); if (xs.length)
+    el("text", { x: xs[0] + W / 2, y: 30, class: "col", "text-anchor": "middle" }).textContent = c.toUpperCase(); });
+
+  groups.forEach(g => {
+    const tone = C(g.kind || "file"), w = g.x2 - g.x, h = g.y2 - g.y;
+    if (F) {
+      el("rect", { x: g.x, y: g.y, width: w, height: h, rx: 2, fill: "rgba(0,0,0,.25)", stroke: "#8a6a3a", "stroke-width": 1.5, "stroke-dasharray": "10 4" });
+      el("rect", { x: g.x, y: g.y, width: Math.min(w, g.label.length * 8.4 + 26), height: 20, fill: "#3b3732", stroke: "#8a6a3a", "stroke-width": 1.5 });
+    } else {
+      el("rect", { x: g.x, y: g.y, width: w, height: h, rx: 12, fill: tone, "fill-opacity": .05, stroke: tone, "stroke-opacity": .5, "stroke-dasharray": "7 5" });
+      el("rect", { x: g.x, y: g.y, width: w, height: 22, rx: 12, fill: tone, "fill-opacity": .14 });
+    }
+    el("text", { x: g.x + 12, y: g.y + 15, fill: F ? "#ffcc66" : tone, "font-size": 11, "font-weight": 700, "letter-spacing": ".12em" }).textContent = g.label.toUpperCase();
+  });
+
+  const eg = el("g");
+  edges.forEach(e => {
+    const d = pathD(e.pts, !F), col = EC(e.kind), g = el("g", { "data-from": e.from, "data-to": e.to, class: "edge" }, eg); e._g = g;
+    if (F) {
+      if (e.kind === "human") {
+        el("path", { d, fill: "none", stroke: "#15130f", "stroke-width": 4 }, g);
+        el("path", { d, fill: "none", stroke: col, "stroke-width": 1.8, "stroke-dasharray": "7 4", "marker-end": `url(#ar-${e.kind})` }, g);
+        el("path", { d, fill: "none", stroke: "#fff3c4", "stroke-width": 2, "stroke-dasharray": "2 18", class: "flow slow" }, g);
+      } else {
+        el("path", { d, fill: "none", stroke: "#15130f", "stroke-width": 9, "stroke-linejoin": "round" }, g);
+        el("path", { d, fill: "none", stroke: col, "stroke-width": 5, "stroke-opacity": .6, "marker-end": `url(#ar-${e.kind})` }, g);
+        el("path", { d, fill: "none", stroke: "#1b1712", "stroke-width": 5, "stroke-dasharray": "3 7", class: "flow slow", "stroke-opacity": .55 }, g);
+      }
+    } else {
+      el("path", { d, fill: "none", stroke: col, "stroke-width": 5, "stroke-opacity": .16, filter: "url(#soft)" }, g);
+      el("path", { d, fill: "none", stroke: col, "stroke-width": 1.6, "stroke-opacity": .8, "stroke-dasharray": e.kind === "human" ? "5 4" : "", "marker-end": `url(#ar-${e.kind})` }, g);
+      el("path", { d, fill: "none", stroke: "#fff", "stroke-width": 2.2, "stroke-linecap": "round", "stroke-dasharray": "0.1 19.9", "stroke-opacity": .9, class: "flow", filter: "url(#glow)" }, g);
+    }
+    if (e.label) { let best = 0, m = [0, 0];
+      for (let k = 1; k < e.pts.length; k++) { const l = Math.abs(e.pts[k][0] - e.pts[k - 1][0]) + Math.abs(e.pts[k][1] - e.pts[k - 1][1]);
+        if (l > best) { best = l; m = [(e.pts[k][0] + e.pts[k - 1][0]) / 2, (e.pts[k][1] + e.pts[k - 1][1]) / 2]; } }
+      el("text", { x: m[0], y: m[1] - 5, "text-anchor": "middle", "font-size": 10, fill: col, stroke: F ? "#262320" : "#0a0e15", "stroke-width": 3, "paint-order": "stroke" }, g).textContent = e.label; }
+  });
+
+  nodes.forEach(n => {
+    const c = C(n.kind), g = el("g", { class: "node", "data-id": n.id, transform: `translate(${n.px},${n.py})` }); n._g = g;
+    if (F) {
+      el("rect", { width: W, height: H, rx: 3, fill: "url(#steel)", stroke: "#141210", "stroke-width": 2, filter: "url(#shadow)" }, g);
+      el("rect", { x: 2, y: 2, width: W - 4, height: HEAD - 2, fill: n.kind === "human" ? "url(#hazard)" : "#3b3732" }, g);
+      el("rect", { x: 2, y: 2, width: 6, height: H - 4, fill: c }, g);
+      if (n.kind === "human") el("rect", { x: 12, y: 5, width: W - 40, height: HEAD - 8, fill: "#1b1712", "fill-opacity": .85 }, g);
+      [[6, 6], [6, H - 6], [W - 6, H - 6]].forEach(([x, y]) => el("circle", { cx: x, cy: y, r: 1.8, fill: "#77706a", stroke: "#151310" }, g));
+      el("rect", { class: "glow", x: -3, y: -3, width: W + 6, height: H + 6, rx: 4, fill: "none", stroke: STATUS.working, "stroke-width": 2.5, opacity: 0 }, g);
+    } else {
+      el("rect", { class: "glow", x: -2, y: -2, width: W + 4, height: H + 4, rx: 9, fill: "none", stroke: c, "stroke-width": 6, opacity: .2, filter: "url(#soft)" }, g);
+      el("rect", { width: W, height: H, rx: 7, fill: "#121825", "fill-opacity": .95, stroke: c, "stroke-opacity": .7, "stroke-width": 1.2 }, g);
+      el("path", { d: `M0,7 a7,7 0 0 1 7,-7 h${W - 14} a7,7 0 0 1 7,7 v${HEAD - 7} h-${W} z`, fill: `url(#hd-${n.kind})` }, g);
+      if (n.kind === "file") el("rect", { width: W, height: H, rx: 7, fill: "none", stroke: c, "stroke-dasharray": "4 3" }, g);
+    }
+    const tx = F ? 16 : 10;
+    el("text", { x: tx, y: 16.5, fill: F ? (n.kind === "human" ? "#ffcc66" : "#f3e7d3") : "#fff", "font-size": F ? (n.title.length > 21 ? 10 : 11.2) : 12.5, "font-weight": 700,
+                 "letter-spacing": F ? ".04em" : "0" }, g).textContent = `${KINDS[n.kind][3]}\uFE0E  ${F ? n.title.toUpperCase() : n.title}`;
+    el("text", { x: tx, y: HEAD + 17, fill: F ? "#cbbfae" : "#9fb0cc", "font-size": 10.5 }, g).textContent = n.sub || "";
+    if (n.model) el("text", { x: tx, y: HEAD + 32, fill: c, "font-size": 10, "font-weight": 600 }, g).textContent = n.model;
+    if (n.stale) el("rect", { x: -4, y: -4, width: W + 8, height: H + 8, rx: 10, fill: "none", stroke: "#ff5c6c", "stroke-width": 1.5, "stroke-dasharray": "6 4" }, g);
+    if (n.new) { el("rect", { x: W - 46, y: H - 18, width: 38, height: 13, rx: 3, fill: "#ffb547" }, g);
+                 el("text", { x: W - 27, y: H - 8.5, "text-anchor": "middle", "font-size": 9, "font-weight": 800, fill: "#1a1206" }, g).textContent = "NEW"; }
+    n._dot = el("circle", { class: "sdot", cx: W - 12, cy: HEAD / 2, r: 4, fill: STATUS.idle, opacity: last ? 1 : 0 }, g);
+    n._live = el("text", { x: tx, y: H - 9, fill: F ? "#e9c88a" : "#7f93b5", "font-size": 10, "font-family": "var(--mono)" }, g);
+    g.addEventListener("mouseenter", () => { if (!pts.size) hover(n); });
+    g.addEventListener("mouseleave", () => pinned ? hover(byId[pinned]) : clearHover());
+    g.addEventListener("click", e => { if (dragged) return; pinned = n.id; hover(n); e.stopPropagation(); });
+  });
+  const used = new Set(nodes.map(n => n.kind)), usedE = new Set(edges.map(e => e.kind));
+  document.getElementById("legend").innerHTML = [...used].map(k => `<span><i style="background:${C(k)}"></i>${KINDS[k][0]}</span>`).join("") +
+    [...usedE].map(k => `<span style="color:${EC(k)}">━ ${EDGES[k][0]}</span>`).join("") +
+    (last ? Object.entries(STATUS).map(([k, v]) => `<span><i style="background:${v};border-radius:50%;width:9px;height:9px"></i>${k}</span>`).join("") : "");
+  applyView();
+  if (last) apply(last);
+}
+
+const info = document.getElementById("info");
+function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); showIdle(); }
+function showIdle() { info.innerHTML = `<h3>DETAILS</h3>Hover or tap a box to see what it does, what it connects to${last ? " and what it is doing now" : ""}.`; }
+function hover(n) {
+  const near = new Set([n.id]);
+  svg.querySelectorAll(".edge").forEach(p => { const on = p.dataset.from === n.id || p.dataset.to === n.id;
+    p.classList.toggle("dim", !on); if (on) { near.add(p.dataset.from); near.add(p.dataset.to); } });
+  svg.querySelectorAll(".node").forEach(x => x.classList.toggle("dim", !near.has(x.dataset.id)));
+  const inn = edges.filter(e => e.to === n.id).map(e => byId[e.from].title), out = edges.filter(e => e.from === n.id).map(e => byId[e.to].title);
+  const st = last?.nodes?.[n.id];
+  info.innerHTML = `<h3>${esc(n.title.toUpperCase())} · ${esc(KINDS[n.kind][0])}${n.model ? " · " + esc(n.model) : ""}</h3>${esc(n.detail || n.sub)}` +
+    (inn.length ? `\n<span style="opacity:.65">from:</span> ${esc(inn.join(", "))}` : "") + (out.length ? `\n<span style="opacity:.65">to:</span> ${esc(out.join(", "))}` : "") +
+    (st ? `\n\n<b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}${st.detail ? "\n" + esc(st.detail) : ""}` : "");
+}
+
+// ---------------- pan and zoom: drag with mouse or finger, pinch / Ctrl+wheel / buttons to zoom ----------------
+const wrap = document.getElementById("wrap");
+const view = { x: 0, y: 0, s: 1, fitted: true };        // s = screen pixels per map pixel
+const pts = new Map(); let moved = 0, dragged = false, pinch = null, pinned = null;
+function fitScale() { return Math.min(wrap.clientWidth / VW, wrap.clientHeight / VH); }
+function sizeWrap() {
+  const w = wrap.clientWidth;
+  wrap.style.height = Math.round(w < 760 ? window.innerHeight * 0.72 : Math.min(VH * w / VW, window.innerHeight * 0.86)) + "px";
+}
+function applyView() {
+  const vw = wrap.clientWidth / view.s, vh = wrap.clientHeight / view.s;
+  view.x = VW <= vw ? (VW - vw) / 2 : Math.min(Math.max(view.x, 0), VW - vw);
+  view.y = VH <= vh ? (VH - vh) / 2 : Math.min(Math.max(view.y, 0), VH - vh);
+  svg.setAttribute("viewBox", `${view.x} ${view.y} ${vw} ${vh}`);
+}
+function fit() { view.s = fitScale(); view.x = view.y = 0; view.fitted = true; applyView(); }
+function zoomAt(f, cx, cy) {                            // cx, cy: point in the frame that stays put
+  const s = Math.min(3, Math.max(fitScale(), view.s * f)), mx = view.x + cx / view.s, my = view.y + cy / view.s;
+  view.s = s; view.x = mx - cx / s; view.y = my - cy / s; view.fitted = false; applyView();
+}
+wrap.addEventListener("pointerdown", e => {
+  if (!pts.size) { moved = 0; dragged = false; }
+  if (e.target.closest("#zoom")) return;
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+});
+wrap.addEventListener("pointermove", e => {
+  if (!pts.has(e.pointerId)) return;
+  const [px, py] = pts.get(e.pointerId), dx = e.clientX - px, dy = e.clientY - py;
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pts.size === 1) {
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (moved > 5) {
+      if (!dragged) { dragged = true; wrap.classList.add("drag"); try { wrap.setPointerCapture(e.pointerId); } catch (_) {} }
+      view.x -= dx / view.s; view.y -= dy / view.s; view.fitted = false; applyView();
+    }
+  } else if (pts.size === 2) {
+    dragged = true;
+    const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), r = wrap.getBoundingClientRect();
+    if (pinch) zoomAt(d / pinch, (a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top);
+    pinch = d;
+  }
+});
+const lift = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) wrap.classList.remove("drag"); };
+wrap.addEventListener("pointerup", lift); wrap.addEventListener("pointercancel", lift);
+wrap.addEventListener("click", e => { if (dragged && !e.target.closest("#zoom")) { e.stopPropagation(); e.preventDefault(); } dragged = false; }, true);
+svg.addEventListener("click", e => { if (!e.target.closest(".node")) { pinned = null; clearHover(); } });
+wrap.addEventListener("wheel", e => {                   // plain scrolling keeps scrolling the page
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault(); const r = wrap.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.004), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+document.querySelectorAll("#zoom button").forEach(b => b.onclick = () => b.dataset.z === "fit" ? fit()
+  : zoomAt(b.dataset.z === "in" ? 1.3 : 1 / 1.3, wrap.clientWidth / 2, wrap.clientHeight / 2));
+window.addEventListener("resize", () => { sizeWrap(); view.fitted ? fit() : applyView(); });
+
+// ---------------- live mode: poll status.json from the board server ----------------
+function driftChip(d) {
+  if (!d || !d.count) return "";
+  const t = [...(d.stale || []).map(x => "gone: " + x), ...(d.new || []).map(x => "new: " + x)].join("\n");
+  return `<span class="chip" title="${esc(t)}" style="border-color:#ff5c6c;color:#ffb3ba"><span class="dot" style="background:#ff5c6c"></span>map out of date · <b>${d.count}</b></span>`;
+}
+function apply(s) {
+  last = s; document.body.classList.add("live");
+  for (const n of nodes) {
+    const st = s.nodes[n.id] || { status: "idle", line: "" };
+    n._g.setAttribute("class", `node status-${st.status}`);
+    n._dot.setAttribute("fill", STATUS[st.status] || STATUS.idle); n._dot.setAttribute("opacity", 1);
+    const line = st.line || ""; n._live.textContent = line.length > 36 ? line.slice(0, 35) + "…" : line;
+    n._live.setAttribute("fill", st.status === "idle" ? (theme === "factory" ? "#a89a86" : "#5f7090") : STATUS[st.status]);
+    const glow = n._g.querySelector(".glow");
+    if (glow) { glow.setAttribute("opacity", st.status === "working" ? .85 : theme === "factory" ? 0 : .2); if (theme !== "factory") glow.setAttribute("stroke", st.status === "working" ? STATUS.working : KINDS[n.kind][1]); }
+  }
+  edges.forEach(e => { const a = s.nodes[e.from]?.status, b = s.nodes[e.to]?.status; e._g.classList.toggle("active", a === "working" || b === "working"); });
+  const t = s.totals || {};
+  document.getElementById("stats").innerHTML =
+    `<span class="chip"><span class="dot" style="background:${t.working ? STATUS.working : STATUS.idle}"></span>LIVE · <b>${t.working || 0}</b> working</span>` +
+    (t.cost_today !== undefined ? `<span class="chip">today ≈ <b>$${t.cost_today.toFixed(2)}</b></span>` : "") +
+    (t.other_active ? `<span class="chip">${t.other_active} other session(s) active</span>` : "") +
+    driftChip(t.drift || MAP.drift) + `<span class="chip">updated ${new Date(s.time * 1000).toLocaleTimeString([], { hour12: false })}</span>`;
+  const title = id => byId[id]?.title || id;
+  document.getElementById("feed").innerHTML = "<h3>ACTIVITY</h3>" + ((s.feed || []).slice(0, 16).map(f =>
+    `<div><span style="opacity:.6">${new Date(f.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>` +
+    `<span style="color:${byId[f.node] ? KINDS[byId[f.node].kind][theme === "factory" ? 2 : 1] : "#8b97ad"}">${esc(title(f.node))}</span><span title="${esc(f.text)}">${esc(f.text)}</span></div>`).join("") ||
+    `<div style="display:block;opacity:.6">Nothing in the last 24 hours.</div>`);
+}
+async function poll() {
+  try { const r = await fetch("status.json", { cache: "no-store" }); if (!r.ok) throw new Error(r.status); apply(await r.json()); }
+  catch (err) { document.getElementById("stats").innerHTML = `<span class="chip"><span class="dot" style="background:${STATUS.failed}"></span>board offline: ${esc(err.message)}</span>`; }
+  setTimeout(poll, 3000);
+}
+
+document.getElementById("title").textContent = MAP.title;
+document.getElementById("subtitle").textContent = MAP.subtitle || "";
+document.title = MAP.title;
+document.getElementById("motion").onclick = () => document.body.classList.toggle("still");
+const clean = location.hash.includes("clean");   // #clean: map only, for screenshots
+if (clean) document.body.classList.add("clean", "still");
+sizeWrap();
+if (wrap.clientWidth < 760) { view.s = 0.8; view.x = view.y = 0; view.fitted = false; } else { view.s = fitScale(); view.fitted = true; }
+render(location.hash.includes("factory") || MAP.theme === "factory" ? "factory" : "blueprint");   // Factory look: only via #factory
+showIdle();
+document.getElementById("stats").innerHTML = driftChip(MAP.drift);
+if (location.protocol.startsWith("http")) poll();
+</script>
+</body></html>
