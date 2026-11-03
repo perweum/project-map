@@ -262,11 +262,24 @@ def handler(root):
             self.send(404, b"not found", "text/plain")
     return H
 
+def running(port):
+    import socket
+    with socket.socket() as c:
+        c.settimeout(0.5)
+        return c.connect_ex(("127.0.0.1", port)) == 0
+
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Live agent board for the maps in ~/agent-maps")
     ap.add_argument("--root", default="~/agent-maps"); ap.add_argument("--port", type=int, default=8765); ap.add_argument("--once")
+    ap.add_argument("--open", nargs="?", const="", metavar="PROJECT",
+                    help="open the board in your browser (starts it first unless it already runs); optionally straight to one map")
     a = ap.parse_args(); root = X(a.root)
     if a.once: print(json.dumps(status(json.load(open(os.path.join(root, a.once, "map.json")))), indent=1)); sys.exit()
+    url = f"http://127.0.0.1:{a.port}/" + (f"{a.open}/" if a.open else "")
+    if a.open is not None and running(a.port):
+        import webbrowser; webbrowser.open(url); print(f"board already running: opened {url}"); sys.exit()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), handler(root))
-    print(f"agent board on http://127.0.0.1:{a.port}/ (maps in {root})", flush=True)
+    print(f"agent board on http://127.0.0.1:{a.port}/ (maps in {root}); Ctrl+C stops it", flush=True)
+    if a.open is not None:
+        import webbrowser; threading.Timer(0.3, webbrowser.open, [url]).start()
     srv.serve_forever()

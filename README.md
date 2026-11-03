@@ -49,12 +49,13 @@ your own with an `inner` field on any box.
 
 | Gesture | Does |
 |---|---|
-| Hover | preview: its connections light up, details below the map |
-| Click / tap | select: a ring, the details stay, and a toolbar with what you can do with this box (if anything) |
-| Click again, double-click, Enter | the main action: open a box that has an inside |
+| Hover | preview: its connections light up |
+| Click / tap | select: a ring and a toolbar with **Open** (boxes with an inside) and **Details** |
+| Details | a drawer with the description, live status, what it gets from and feeds into (click to jump), and its source files. It follows your selection until you close it |
+| Click again, double-click, Enter | the main action: open a box that has an inside, otherwise show its details |
 | Drag the canvas, pinch, Ctrl+scroll | move and zoom |
 | `/` | search; Enter jumps from hit to hit |
-| Esc, Backspace | deselect, go back out |
+| Esc, Backspace | close the drawer, deselect, go back out |
 
 ## Keeping a map up to date
 
@@ -83,8 +84,12 @@ adds what a script cannot see (people, approvals, external inputs) and writes a 
 ## Live board
 
 ```bash
-python3 board.py            # http://127.0.0.1:8765/  (every map in ~/agent-maps)
+python3 board.py --open     # starts the board (unless it already runs) and opens http://127.0.0.1:8765/ in your browser
+python3 board.py --open my-project   # straight to one map
 ```
+
+The page's **LIVE** chip opens the activity feed in the drawer; click a line to jump to that box. A saved `map.html`
+opened as a file shows "static map · live view?" there instead, with these instructions.
 
 Add a `live` section to a map (`discover.py` drafts one) and boxes light up while work happens:
 

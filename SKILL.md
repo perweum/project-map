@@ -66,7 +66,7 @@ that no text overflows, wires do not bunch up (spread zones apart) and the flow 
 The page pans by dragging and zooms with pinch, Ctrl+scroll or its buttons, so it also works on a phone.
 
 ## 4. Live board (optional; ask the user before adding it to a new project)
-`python3 -I -B <skill>/board.py` serves every map in ~/agent-maps on http://127.0.0.1:8765/ and colours boxes from local
+`python3 -I -B <skill>/board.py --open` serves every map in ~/agent-maps on http://127.0.0.1:8765/ and colours boxes from local
 facts. discover.py drafts a `live` section; check and adjust it. Only these read-only probes exist:
 ```json
 "live": {

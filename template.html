@@ -42,13 +42,29 @@
   .factory #tools button:hover { background: #e39827; color: #1b1712; }
   svg.fade { opacity: 0; } svg { transition: opacity .16s ease; }
   #hint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: rgba(10,14,21,.8); color: #8fa3c4; }
-  #bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 4px 28px 0; align-items: start; }
-  #feed { max-height: 340px; overflow-y: auto; }
-  @media (max-width: 900px) { #bottom { grid-template-columns: minmax(0, 1fr); margin: 4px 12px 0; } header { padding: 14px 14px 4px; } .legend { padding: 12px 14px 24px; } }
-  #info, #feed { font-size: 12.5px; padding: 12px 14px; border-radius: 6px; min-height: 120px; }
-  #info { white-space: pre-line; } #feed h3, #info h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .14em; opacity: .7; }
-  #feed div { display: grid; grid-template-columns: 42px minmax(0, 110px) minmax(0, 1fr); gap: 8px; padding: 2px 0; font-family: var(--mono); font-size: 11.5px; }
-  #feed span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 900px) { header { padding: 14px 14px 4px; } .legend { padding: 12px 14px 24px; } }
+  #drawer { position: absolute; top: 8px; right: 8px; bottom: 8px; width: min(360px, calc(100% - 16px)); z-index: 3; overflow-y: auto;
+            border-radius: 10px; padding: 16px 18px 18px; font-size: 13px; line-height: 1.5; cursor: auto; touch-action: pan-y;
+            transform: translateX(calc(100% + 24px)); transition: transform .2s ease; user-select: text; -webkit-user-select: text; }
+  #drawer.on { transform: none; }
+  @media (max-width: 760px) { #drawer { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64%; border-radius: 14px 14px 0 0;
+                              transform: translateY(105%); } }
+  #drawer .x { position: sticky; top: 0; float: right; margin: -6px -8px 0 8px; width: 30px; height: 30px; border-radius: 6px; border: 0;
+               background: transparent; color: inherit; font-size: 18px; cursor: pointer; opacity: .7; } #drawer .x:hover { opacity: 1; background: rgba(255,255,255,.08); }
+  #drawer .kind { font: 700 10.5px var(--font); letter-spacing: .14em; text-transform: uppercase; }
+  #drawer h2 { margin: 4px 0 2px; font-size: 17px; } #drawer .model { font-size: 12px; font-weight: 600; }
+  #drawer p { margin: 10px 0; opacity: .9; } #drawer h4 { margin: 16px 0 6px; font-size: 10.5px; letter-spacing: .14em; opacity: .6; font-weight: 700; }
+  #drawer .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  #drawer .links button, #drawer .act { font: 600 12px var(--font); padding: 5px 10px; border-radius: 5px; cursor: pointer; border: 1px solid #2c3b55;
+                                        background: #121a29; color: #cfe0ff; } #drawer .links button:hover, #drawer .act:hover { border-color: #4f7cc0; color: #fff; }
+  #drawer .act { margin-top: 4px; padding: 7px 12px; }
+  #drawer code { font: 11.5px var(--mono); opacity: .8; word-break: break-all; }
+  #drawer .feed div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+                      font-size: 12px; cursor: pointer; } #drawer .feed div:hover { background: rgba(255,255,255,.04); }
+  #drawer .feed .who { font-weight: 700; } #drawer .feed .what { grid-column: 2; font: 11.5px var(--mono); opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .blueprint #drawer { background: rgba(14,20,32,.97); border: 1px solid #2c3b55; box-shadow: -8px 0 30px rgba(0,0,0,.45); color: #d8e1f0; }
+  .factory #drawer { background: #33302c; border: 2px solid #1a1816; color: #e9dfcf; }
+  button.chip { cursor: pointer; font: 600 11px var(--font); } button.chip:hover { filter: brightness(1.25); }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; padding: 12px 28px 24px; opacity: .85; }
   .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .dim { opacity: .12; transition: opacity .15s; }
@@ -59,7 +75,7 @@
   .live .edge.active path:nth-child(2) { stroke-opacity: 1; stroke-width: 2.4; }
   .status-working .glow { animation: pulse 1.1s ease-in-out infinite; } .status-working .sdot { animation: pulse .8s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .2; } }
-  body.clean #bottom, body.clean #zoom, body.clean #search, body.clean #hits, body.clean #hint, body.clean .ctl { display: none !important; }
+  body.clean #drawer, body.clean #zoom, body.clean #search, body.clean #hits, body.clean #hint, body.clean .ctl { display: none !important; }
   body.still .flow, body.still .glow, body.still .sdot { animation: none !important; }
   @media (prefers-reduced-motion: reduce) { .flow, .glow, .sdot { animation: none !important; } }
 
@@ -68,7 +84,6 @@
                       linear-gradient(rgba(120,160,220,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,220,.025) 1px, transparent 1px);
     background-size: 160px 160px, 160px 160px, 20px 20px, 20px 20px; }
   .blueprint .ctl button { color: #9fb6d8; border-color: #2c3b55; } .blueprint .ctl button.on { background: #1d2b44; color: #fff; border-color: #4f7cc0; }
-  .blueprint #info, .blueprint #feed { background: rgba(18,25,38,.88); border: 1px solid #23324b; }
   .blueprint .chip { background: #121a29; border: 1px solid #263552; color: #b9c7de; }
   .blueprint .col { fill: #6f86ab; font: 600 11px var(--font); letter-spacing: .18em; }
 
@@ -78,7 +93,6 @@
     background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%; }
   .factory h1 { text-transform: uppercase; letter-spacing: .12em; color: #ffcc66; }
   .factory .ctl button { color: #e9dfcf; border-color: #5a524a; background: #3a3530; } .factory .ctl button.on { background: #e39827; color: #1b1712; border-color: #ffbf55; }
-  .factory #info, .factory #feed { background: #33302c; border: 2px solid #1a1816; box-shadow: inset 0 1px 0 #4a453f; }
   .factory .chip { background: #3a3530; border: 1px solid #1a1816; color: #e9dfcf; border-radius: 3px; }
   .factory .col { fill: #c9a26a; font: 700 11px var(--font); letter-spacing: .2em; }
 </style></head>
@@ -88,8 +102,7 @@
   <div id="stats"></div>
   <div class="ctl"><span id="hits"></span><input id="search" type="search" placeholder="Search  ( / )" autocomplete="off" aria-label="Search the map"><button id="motion">Motion</button></div>
 </header>
-<div id="wrap"><svg id="map"></svg><div id="crumbs"></div><div id="tools" role="toolbar"></div><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
-<div id="bottom"><div id="info"></div><div id="feed"><h3>ACTIVITY</h3><div style="display:block;opacity:.6;font-family:var(--font)">Static map. Open it through the board (python3 board.py) to see live activity.</div></div></div>
+<div id="wrap"><svg id="map"></svg><div id="crumbs"></div><div id="tools" role="toolbar"></div><aside id="drawer" aria-label="Details"></aside><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
 <div class="legend" id="legend"></div>
 <script>
 const MAP = /*MAP_DATA*/null;
@@ -341,32 +354,85 @@ function render(t) {
   if (last) apply(last);
 }
 
-const info = document.getElementById("info");
-function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); showIdle(); applySearch(); }
+function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); applySearch(); }
 // ---------------- selection and actions: one toolbar, every feature adds an entry to ACTIONS ----------------
 // Gestures: hover = preview, click/tap = select (+ toolbar), click again / double-click / Enter = main action,
 // drag on the canvas = pan, Esc = deselect (or go back), Backspace = go back.
 const ACTIONS = [
-  { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => n.kids > 0, run: n => enter(n), main: true },
+  { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => n.kids > 0, run: n => enter(n), main: () => true },
+  { id: "details", label: n => drawerFor(n) ? "Hide details" : "Details", when: () => true, run: n => drawerFor(n) ? closeDrawer() : openDetails(n), main: n => !n.kids },
 ];
 const tools = document.getElementById("tools");
 function select(n) {
   pinned = n ? n.id : null;
   svg.querySelectorAll(".node.sel").forEach(x => x.classList.remove("sel"));
-  if (!n) { tools.classList.remove("on"); return; }
+  if (!n) { tools.classList.remove("on"); if (drawerMode === "node") closeDrawer(); return; }
   n._g.classList.add("sel"); hover(n);
+  if (drawerMode === "node") openDetails(n);                // an open drawer follows the selection
   const acts = ACTIONS.filter(a => a.when(n));
   tools.innerHTML = acts.map(a => `<button data-a="${a.id}">${esc(a.label(n))}</button>`).join("");
-  tools.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ACTIONS.find(a => a.id === b.dataset.a).run(n); });
+  tools.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ACTIONS.find(a => a.id === b.dataset.a).run(n); if (pinned === n.id) select(n); });
   tools.classList.toggle("on", acts.length > 0); placeTools();
 }
-function mainAction(n) { const a = ACTIONS.find(a => a.main && a.when(n)); if (a) a.run(n); }
+function mainAction(n) { const a = ACTIONS.find(a => a.when(n) && a.main && a.main(n)); if (a) a.run(n); }
 function placeTools() {
   const n = pinned && byId[pinned]; if (!n || !tools.classList.contains("on")) return;
   const x = (n.px + W / 2 - view.x) * view.s, top = (n.py - view.y) * view.s;
   tools.style.left = Math.min(Math.max(x, 80), wrap.clientWidth - 80) + "px";
   const h = tools.offsetHeight || 38, lap = Math.min(14, H * view.s * .3);       // sits over the box's top edge
   tools.style.top = (top - h + lap > 4 ? top - h + lap : (n.py + H - view.y) * view.s - lap) + "px";
+}
+
+// ---------------- drawer: details of the selected box, or the live activity feed ----------------
+const drawer = document.getElementById("drawer"); let drawerMode = null;
+const drawerFor = n => drawerMode === "node" && pinned === n.id && drawer.classList.contains("on");
+function closeDrawer() { drawer.classList.remove("on"); drawerMode = null; if (pinned) { const n = byId[pinned]; if (n) refreshTools(n); } }
+function refreshTools(n) { tools.querySelectorAll("button").forEach(b => { const a = ACTIONS.find(a => a.id === b.dataset.a); b.textContent = a.label(n); }); }
+function linkBtns(ids) { return `<div class="links">${ids.map(id => `<button data-go="${esc(id)}">${esc(byId[id].title)}</button>`).join("")}</div>`; }
+function openDetails(n) {
+  drawerMode = "node"; const keep = drawer.scrollTop, same = drawer.dataset.id === n.id; drawer.dataset.id = n.id;
+  const C = KINDS[n.kind][theme === "factory" ? 2 : 1], st = last?.nodes?.[n.id];
+  const inn = [...new Set(edges.filter(e => e.to === n.id).map(e => e.from))], out = [...new Set(edges.filter(e => e.from === n.id).map(e => e.to))];
+  drawer.innerHTML = `<button class="x" title="Close (Esc)">×</button>
+    <div class="kind" style="color:${C}">${esc(KINDS[n.kind][0])}${n.outside ? " · outside this box" : ""}</div><h2>${esc(n.title)}</h2>
+    ${n.model ? `<div class="model" style="color:${C}">${esc(n.model)}</div>` : ""}
+    <p>${esc(n.detail || n.sub || "")}</p>
+    ${n.kids ? `<button class="act" data-open>Open ▸ ${n.kids} parts inside</button>` : ""}
+    ${st ? `<h4>NOW</h4><div><b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}</div>${st.detail ? `<p style="white-space:pre-line;font-size:12px">${esc(st.detail)}</p>` : ""}` : ""}
+    ${inn.length ? `<h4>GETS FROM</h4>${linkBtns(inn)}` : ""}${out.length ? `<h4>FEEDS INTO</h4>${linkBtns(out)}` : ""}
+    ${n.source && n.source.length ? `<h4>SOURCE</h4>${n.source.slice(0, 12).map(x => `<div><code>${esc(x)}</code></div>`).join("")}` : ""}`;
+  drawer.querySelector(".x").onclick = () => closeDrawer();
+  drawer.querySelector("[data-open]")?.addEventListener("click", () => enter(n));
+  drawer.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { const m = byId[b.dataset.go]; jump(m); select(m); });
+  drawer.classList.add("on"); drawer.scrollTop = same ? keep : 0; refreshTools(n);
+}
+function liveChip() {
+  const t = last?.totals || {};
+  return last ? `<button class="chip" id="livechip" title="Show the activity feed"><span class="dot" style="background:${t.working ? STATUS.working : STATUS.idle}"></span>LIVE · <b>${t.working || 0}</b> working · activity</button>`
+              : `<button class="chip" id="livechip" title="How to see live agent activity"><span class="dot" style="background:${STATUS.idle}"></span>static map · live view?</button>`;
+}
+function toggleActivity() { if (drawerMode === "activity") closeDrawer(); else openActivity(); }
+function openActivity() {
+  drawerMode = "activity"; drawer.dataset.id = "";
+  let body;
+  if (!last) {
+    const proj = decodeURIComponent(location.pathname.split("/").slice(-2, -1)[0] || "<project>");
+    body = `<p>This is a saved copy of the map, so it cannot show what your agents are doing.</p>
+      <p>The live board shows the same map with working boxes glowing, each agent's current step and an activity feed.
+      Start it (it keeps running in the background) and open it in your browser:</p>
+      <p><code>python3 board.py --open</code></p><p>Then this map is at <code>http://127.0.0.1:8765/${esc(proj)}/</code></p>`;
+  } else {
+    const title = id => topById[id]?.title || id;
+    body = (last.feed || []).slice(0, 40).map(f => `<div data-node="${esc(f.node)}"><span style="opacity:.6">${new Date(f.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>` +
+      `<span class="who" style="color:${topById[f.node] ? KINDS[topById[f.node].kind][theme === "factory" ? 2 : 1] : "#8b97ad"}">${esc(title(f.node))}</span>` +
+      `<span class="what" title="${esc(f.text)}">${esc(f.text)}</span></div>`).join("") || `<p style="opacity:.6">Nothing in the last 24 hours.</p>`;
+    body = `<div class="feed">${body}</div>`;
+  }
+  const keep = drawer.scrollTop;
+  drawer.innerHTML = `<button class="x" title="Close (Esc)">×</button><div class="kind" style="color:${STATUS.working}">${last ? "live" : "live view"}</div><h2>Activity</h2>${body}`;
+  drawer.querySelector(".x").onclick = () => closeDrawer();
+  drawer.querySelectorAll(".feed [data-node]").forEach(d => d.onclick = () => { const m = byId[d.dataset.node]; if (m) { jump(m); select(m); } });
+  drawer.classList.add("on"); drawer.scrollTop = keep;
 }
 
 // ---------------- zoom into a box: open its inner map; breadcrumb, Backspace or Esc to go back ----------------
@@ -382,8 +448,7 @@ function enter(n) {
   const back = { level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title };
   crossFade(() => {
     stack.push(back); load({ ...n.inner, title: n.title });
-    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle(); entering = false;
-  info.innerHTML = `<h3>INSIDE ${esc(n.title.toUpperCase())}</h3>${esc(n.detail || n.sub || "")}\nDashed boxes are outside parts this box connects to. Backspace or the breadcrumb goes back.`;
+    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); entering = false;
   });
 }
 function crossFade(swap) {                               // fade out, swap the drawing, fade in
@@ -396,11 +461,12 @@ function up(k = 1) {
   if (!stack.length) return;
   let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
   select(null);
-  crossFade(() => { load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); showIdle(); });
+  crossFade(() => { load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); });
 }
 document.addEventListener("keydown", e => {
   if (document.activeElement === sbox) return;
   if (e.key === "Enter" && pinned) { e.preventDefault(); mainAction(byId[pinned]); return; }
+  if (e.key === "Escape" && drawer.classList.contains("on")) { closeDrawer(); return; }
   if (e.key === "Escape" && pinned) { select(null); clearHover(); return; }
   if ((e.key === "Backspace" || e.key === "Escape") && stack.length) { e.preventDefault(); up(); }
 });
@@ -428,18 +494,11 @@ sbox.addEventListener("keydown", e => {
   const n = hits[hitAt]; jump(n); select(n); applySearch(); svg.querySelector(`.node[data-id="${CSS.escape(n.id)}"]`).classList.remove("dim");
 });
 document.addEventListener("keydown", e => { if (e.key === "/" && document.activeElement !== sbox) { e.preventDefault(); sbox.focus(); } });
-function showIdle() { info.innerHTML = `<h3>DETAILS</h3>Hover or tap a box to see what it does, what it connects to${last ? " and what it is doing now" : ""}.`; }
 function hover(n) {
   const near = new Set([n.id]);
   svg.querySelectorAll(".edge").forEach(p => { const on = p.dataset.from === n.id || p.dataset.to === n.id;
     p.classList.toggle("dim", !on); if (on) { near.add(p.dataset.from); near.add(p.dataset.to); } });
   svg.querySelectorAll(".node").forEach(x => x.classList.toggle("dim", !near.has(x.dataset.id)));
-  const inn = edges.filter(e => e.to === n.id).map(e => byId[e.from].title), out = edges.filter(e => e.from === n.id).map(e => byId[e.to].title);
-  const st = last?.nodes?.[n.id];
-  const inner = n.inner && n.inner.nodes ? `\n<span style="color:#4da3ff">⧉ contains ${n.inner.nodes.filter(m => !m.outside).length} parts: click again, double-click or Enter to open</span>` : "";
-  info.innerHTML = `<h3>${esc(n.title.toUpperCase())} · ${esc(KINDS[n.kind][0])}${n.model ? " · " + esc(n.model) : ""}</h3>${esc(n.detail || n.sub)}` +
-    (inn.length ? `\n<span style="opacity:.65">from:</span> ${esc(inn.join(", "))}` : "") + (out.length ? `\n<span style="opacity:.65">to:</span> ${esc(out.join(", "))}` : "") +
-    (st ? `\n\n<b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}${st.detail ? "\n" + esc(st.detail) : ""}` : "") + inner;
 }
 
 // ---------------- pan and zoom: drag with mouse or finger, pinch / Ctrl+wheel / buttons to zoom ----------------
@@ -449,7 +508,7 @@ const pts = new Map(); let moved = 0, dragged = false, pinch = null, pinned = nu
 function fitScale() { return Math.min(wrap.clientWidth / VW, wrap.clientHeight / VH); }
 function sizeWrap() {
   const w = wrap.clientWidth;
-  wrap.style.height = Math.round(w < 760 ? window.innerHeight * 0.72 : Math.min(VH * w / VW, window.innerHeight * 0.86)) + "px";
+  wrap.style.height = Math.round(w < 760 ? window.innerHeight * 0.78 : Math.max(420, Math.min(VH * w / VW, window.innerHeight - wrap.getBoundingClientRect().top - 56))) + "px";
 }
 function applyView() {
   const vw = wrap.clientWidth / view.s, vh = wrap.clientHeight / view.s;
@@ -465,7 +524,7 @@ function zoomAt(f, cx, cy) {                            // cx, cy: point in the 
 }
 wrap.addEventListener("pointerdown", e => {
   if (!pts.size) { moved = 0; dragged = false; }
-  if (e.target.closest("#zoom")) return;
+  if (e.target.closest("#zoom, #drawer, #tools, #crumbs")) return;
   pts.set(e.pointerId, [e.clientX, e.clientY]);
 });
 wrap.addEventListener("pointermove", e => {
@@ -487,7 +546,7 @@ wrap.addEventListener("pointermove", e => {
 });
 const lift = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) wrap.classList.remove("drag"); };
 wrap.addEventListener("pointerup", lift); wrap.addEventListener("pointercancel", lift);
-wrap.addEventListener("click", e => { if (dragged && !e.target.closest("#zoom")) { e.stopPropagation(); e.preventDefault(); } dragged = false; }, true);
+wrap.addEventListener("click", e => { if (dragged && !e.target.closest("#zoom, #drawer, #tools")) { e.stopPropagation(); e.preventDefault(); } dragged = false; }, true);
 svg.addEventListener("click", e => { if (!e.target.closest(".node") && !dragged) { select(null); clearHover(); } });
 wrap.addEventListener("wheel", e => {                   // plain scrolling keeps scrolling the page
   if (!e.ctrlKey && !e.metaKey) return;
@@ -517,16 +576,11 @@ function apply(s) {
   }
   edges.forEach(e => { const a = s.nodes[e.from]?.status, b = s.nodes[e.to]?.status; e._g.classList.toggle("active", a === "working" || b === "working"); });
   const t = s.totals || {};
-  document.getElementById("stats").innerHTML =
-    `<span class="chip"><span class="dot" style="background:${t.working ? STATUS.working : STATUS.idle}"></span>LIVE · <b>${t.working || 0}</b> working</span>` +
+  document.getElementById("stats").innerHTML = liveChip() +
     (t.cost_today !== undefined ? `<span class="chip">today ≈ <b>$${t.cost_today.toFixed(2)}</b></span>` : "") +
-    (t.other_active ? `<span class="chip">${t.other_active} other session(s) active</span>` : "") +
-    driftChip(t.drift || MAP.drift) + `<span class="chip">updated ${new Date(s.time * 1000).toLocaleTimeString([], { hour12: false })}</span>`;
-  const title = id => topById[id]?.title || id;
-  document.getElementById("feed").innerHTML = "<h3>ACTIVITY</h3>" + ((s.feed || []).slice(0, 16).map(f =>
-    `<div><span style="opacity:.6">${new Date(f.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>` +
-    `<span style="color:${topById[f.node] ? KINDS[topById[f.node].kind][theme === "factory" ? 2 : 1] : "#8b97ad"}">${esc(title(f.node))}</span><span title="${esc(f.text)}">${esc(f.text)}</span></div>`).join("") ||
-    `<div style="display:block;opacity:.6">Nothing in the last 24 hours.</div>`);
+    (t.other_active ? `<span class="chip">${t.other_active} other session(s) active</span>` : "") + driftChip(t.drift || MAP.drift);
+  if (drawerMode === "activity") openActivity();
+  else if (drawerMode === "node" && pinned && byId[pinned]) openDetails(byId[pinned]);
 }
 async function poll() {
   try { const r = await fetch("status.json", { cache: "no-store" }); if (!r.ok) throw new Error(r.status); apply(await r.json()); }
@@ -543,8 +597,8 @@ if (clean) document.body.classList.add("clean", "still");
 sizeWrap();
 if (wrap.clientWidth < 760) { view.s = 0.8; view.x = view.y = 0; view.fitted = false; } else { view.s = fitScale(); view.fitted = true; }
 render(location.hash.includes("factory") || MAP.theme === "factory" ? "factory" : "blueprint");   // Factory look: only via #factory
-showIdle();
-document.getElementById("stats").innerHTML = driftChip(MAP.drift);
+document.getElementById("stats").innerHTML = liveChip() + driftChip(MAP.drift);
+document.getElementById("stats").addEventListener("click", e => { if (e.target.closest("#livechip")) toggleActivity(); });
 if (location.protocol.startsWith("http")) poll();
 </script>
 </body></html>

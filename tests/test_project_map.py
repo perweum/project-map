@@ -99,7 +99,7 @@ class Fixture(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         html = open(os.path.join(d, "map.html")).read()
         self.assertIn('"widget-builder"', html); self.assertNotIn("/*MAP_DATA*/null", html)
-        self.assertIn('id="search"', html); self.assertIn('id="tools"', html)
+        self.assertIn('id="search"', html); self.assertIn('id="tools"', html); self.assertIn('id="drawer"', html)
         bad = {"title": "x", "nodes": [{"id": "a", "x": 0, "y": 0, "kind": "robot", "title": "A"}], "edges": [["a", "zz"]]}
         json.dump(bad, open(os.path.join(d, "bad.json"), "w"))
         r = subprocess.run([sys.executable, "-I", "-B", os.path.join(HERE, "render_map.py"), os.path.join(d, "bad.json"), "--out", os.path.join(d, "bad.html")], capture_output=True, text=True)
