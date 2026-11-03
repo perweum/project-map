@@ -66,6 +66,9 @@
   .factory #drawer { background: #33302c; border: 2px solid #1a1816; color: #e9dfcf; }
   button.chip { cursor: pointer; font: 600 11px var(--font); } button.chip:hover { filter: brightness(1.25); }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; padding: 12px 28px 24px; opacity: .85; }
+  .legend .lg { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 3px 7px; cursor: pointer; }
+  .legend .lg:hover { border-color: #2c3b55; } .legend .lg.on { border-color: #4f7cc0; background: #1d2b44; color: #fff; }
+  .legend .lg.clear { opacity: .7; text-decoration: underline; }
   .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .dim { opacity: .12; transition: opacity .15s; }
   .flow { animation: flow 1.1s linear infinite; } .flow.slow { animation-duration: 2.2s; }
@@ -346,11 +349,12 @@ function render(t) {
       if (pinned === n.id) mainAction(n); else select(n); });
   });
   const used = new Set(nodes.map(n => n.kind)), usedE = new Set(edges.map(e => e.kind));
-  document.getElementById("legend").innerHTML = [...used].map(k => `<span><i style="background:${C(k)}"></i>${KINDS[k][0]}</span>`).join("") +
-    [...usedE].map(k => `<span style="color:${EC(k)}">━ ${EDGES[k][0]}</span>`).join("") +
+  document.getElementById("legend").innerHTML = [...used].map(k => `<button class="lg${kindFilter.has(k) ? " on" : ""}" data-k="${k}" title="Show only this kind (click more to add)"><i style="background:${C(k)}"></i>${KINDS[k][0]}</button>`).join("") +
+    [...usedE].map(k => `<button class="lg${edgeFilter.has(k) ? " on" : ""}" data-e="${k}" title="Show only these links" style="color:${EC(k)}">━ ${EDGES[k][0]}</button>`).join("") +
+    (kindFilter.size || edgeFilter.size ? `<button class="lg clear" data-clear>show all</button>` : "") +
     (last ? Object.entries(STATUS).map(([k, v]) => `<span><i style="background:${v};border-radius:50%;width:9px;height:9px"></i>${k}</span>`).join("") : "");
   applyView();
-  if (typeof applySearch === "function" && document.getElementById("search").value) applySearch();
+  if (typeof applySearch === "function" && (document.getElementById("search").value || kindFilter.size || edgeFilter.size)) applySearch();
   if (last) apply(last);
 }
 
@@ -442,12 +446,19 @@ function crumbs() {
   c.innerHTML = stack.map((s, i) => `<button data-up="${stack.length - i}">${esc(s.title)}</button><span>›</span>`).join("") + `<b>${esc(LEVEL.title)}</b>`;
   c.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); up(+b.dataset.up); });
 }
+const kindFilter = new Set(), edgeFilter = new Set();
+document.getElementById("legend").addEventListener("click", e => {
+  const b = e.target.closest(".lg"); if (!b) return;
+  if (b.dataset.clear !== undefined) { kindFilter.clear(); edgeFilter.clear(); }
+  else { const set = b.dataset.k ? kindFilter : edgeFilter, k = b.dataset.k || b.dataset.e; set.has(k) ? set.delete(k) : set.add(k); }
+  render(theme); svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); applySearch();
+});
 let entering = false;
 function enter(n) {
   if (entering) return; entering = true; select(null);
   const back = { level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title };
   crossFade(() => {
-    stack.push(back); load({ ...n.inner, title: n.title });
+    stack.push(back); kindFilter.clear(); edgeFilter.clear(); load({ ...n.inner, title: n.title });
     sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); entering = false;
   });
 }
@@ -461,7 +472,7 @@ function up(k = 1) {
   if (!stack.length) return;
   let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
   select(null);
-  crossFade(() => { load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); });
+  crossFade(() => { kindFilter.clear(); edgeFilter.clear(); load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); });
 }
 document.addEventListener("keydown", e => {
   if (document.activeElement === sbox) return;
@@ -473,12 +484,14 @@ document.addEventListener("keydown", e => {
 // ---------------- search: title, text, model, id; Enter jumps to the next hit, Esc clears, "/" focuses ----------------
 const sbox = document.getElementById("search"), hitsEl = document.getElementById("hits");
 let hits = [], hitAt = -1;
-function applySearch() {
+function applySearch() {                                // search + legend filter together
   const q = sbox.value.trim().toLowerCase();
-  hits = q ? nodes.filter(n => [n.title, n.sub, n.detail, n.model, n.id, KINDS[n.kind][0]].join(" ").toLowerCase().includes(q)) : [];
-  const set = new Set(hits.map(n => n.id));
-  svg.querySelectorAll(".node").forEach(x => { x.classList.toggle("hit", set.has(x.dataset.id)); if (q) x.classList.toggle("dim", !set.has(x.dataset.id)); });
-  svg.querySelectorAll(".edge").forEach(p => { if (q) p.classList.toggle("dim", !(set.has(p.dataset.from) && set.has(p.dataset.to))); });
+  const kindOk = n => !kindFilter.size || kindFilter.has(n.kind);
+  hits = q ? nodes.filter(n => kindOk(n) && [n.title, n.sub, n.detail, n.model, n.id, KINDS[n.kind][0]].join(" ").toLowerCase().includes(q)) : [];
+  const set = new Set(hits.map(n => n.id)), filtering = q || kindFilter.size || edgeFilter.size;
+  const shown = id => kindOk(byId[id]) && (!q || set.has(id));
+  svg.querySelectorAll(".node").forEach(x => { x.classList.toggle("hit", set.has(x.dataset.id)); if (filtering) x.classList.toggle("dim", !shown(x.dataset.id)); });
+  edges.forEach(e => { if (filtering) e._g.classList.toggle("dim", !(shown(e.from) && shown(e.to) && (!edgeFilter.size || edgeFilter.has(e.kind)))); });
   hitsEl.textContent = q ? (hitAt >= 0 && hits.length ? `${hitAt + 1}/${hits.length}` : `${hits.length} found`) : "";
   sbox.classList.toggle("none", !!q && !hits.length);
 }
@@ -582,9 +595,14 @@ function apply(s) {
   if (drawerMode === "activity") openActivity();
   else if (drawerMode === "node" && pinned && byId[pinned]) openDetails(byId[pinned]);
 }
+let everLive = false;
 async function poll() {
-  try { const r = await fetch("status.json", { cache: "no-store" }); if (!r.ok) throw new Error(r.status); apply(await r.json()); }
-  catch (err) { document.getElementById("stats").innerHTML = `<span class="chip"><span class="dot" style="background:${STATUS.failed}"></span>board offline: ${esc(err.message)}</span>`; }
+  try { const r = await fetch("status.json", { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
+        const d = await r.json(); if (!d || !d.nodes) throw new Error("not a board"); everLive = true; apply(d); }
+  catch (err) {
+    if (!everLive) return;                               // served by something else (editor preview, file server): stay a static map
+    document.getElementById("stats").innerHTML = `<span class="chip"><span class="dot" style="background:${STATUS.failed}"></span>board stopped · last data ${new Date(last.time * 1000).toLocaleTimeString([], { hour12: false })}</span>`;
+  }
   setTimeout(poll, 3000);
 }
 

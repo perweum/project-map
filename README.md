@@ -55,6 +55,7 @@ your own with an `inner` field on any box.
 | Click again, double-click, Enter | the main action: open a box that has an inside, otherwise show its details |
 | Drag the canvas, pinch, Ctrl+scroll | move and zoom |
 | `/` | search; Enter jumps from hit to hit |
+| Legend entries | click a kind (script, input …) or link type to show only those; click more to add, "show all" to reset |
 | Esc, Backspace | close the drawer, deselect, go back out |
 
 ## Keeping a map up to date
