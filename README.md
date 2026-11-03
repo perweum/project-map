@@ -9,7 +9,7 @@ comes out. Optionally, a local live board shows which agent is working and on wh
 - **Automatic.** `discover.py` scans the repository and drafts the map. No configuration needed.
 - **Yours to tidy.** The map is a plain `map.json`; rename, regroup and move boxes by hand, or let a coding agent do it with the included skill.
 - **Stays true.** Each box remembers the files it came from. When scripts or workflows appear or disappear, the map says it is out of date and `--update` adds the new parts.
-- **Works anywhere.** The output is one HTML file: open it in any browser, drag to move, pinch or Ctrl+scroll to zoom. It works on phones too.
+- **Works anywhere.** The output is one HTML file: open it in any browser, drag to move, pinch or Ctrl+scroll to zoom, press `/` to search. It works on phones too.
 - **Light.** Python 3.10+ standard library only. No dependencies, no build step, and nothing leaves your machine.
 
 ## Quick start
@@ -99,7 +99,7 @@ Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` 
 ## Roadmap
 
 - [x] Automatic discovery, drift check, live agent board
-- [ ] Search box, and export to PNG/SVG from the page
+- [x] Search box
 - [ ] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
 - [ ] Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
 - [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
