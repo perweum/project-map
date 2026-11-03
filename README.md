@@ -40,10 +40,21 @@ This is what the raw draft looks like for [fastapi/fastapi](https://github.com/f
 
 Large projects stay readable: script families (`gen_*.py`), sub-folders and rarely used scripts are merged into one box each.
 
-**Zoom into a box.** Merged boxes and app folders carry an inner map. Press **open** on the box, or double-click it, to see its
-parts: the scripts in a family with the outside boxes each one reads or feeds (dashed), or the files and sub-folders of an app
+**Zoom into a box.** Merged boxes and app folders carry an inner map; they look like a stack of cards with a count (⧉ 11).
+Open one with a second click, a double-click, Enter, or **Open** in its toolbar to see its parts: the scripts in a family with the outside boxes each one reads or feeds (dashed), or the files and sub-folders of an app
 folder and which imports which. A breadcrumb (or Backspace) takes you back out. Inner maps can be nested, and you can write
 your own with an `inner` field on any box.
+
+## Using the page
+
+| Gesture | Does |
+|---|---|
+| Hover | preview: its connections light up, details below the map |
+| Click / tap | select: a ring, the details stay, and a toolbar with what you can do with this box |
+| Click again, double-click, Enter | the main action: open a box that has an inside |
+| Drag the canvas, pinch, Ctrl+scroll | move and zoom |
+| `/` | search; Enter jumps from hit to hit |
+| Esc, Backspace | deselect, go back out |
 
 ## Keeping a map up to date
 

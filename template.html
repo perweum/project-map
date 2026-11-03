@@ -32,6 +32,16 @@
   #crumbs b { padding: 5px 10px; border-radius: 5px; background: #1d2b44; color: #fff; border: 1px solid #4f7cc0; }
   #crumbs span { opacity: .5; }
   .node.outside { opacity: .55; }
+  .node { cursor: pointer; } .node .selring { opacity: 0; } .node.sel .selring { opacity: 1; }
+  #tools { position: absolute; display: none; gap: 4px; padding: 4px; border-radius: 8px; transform: translateX(-50%); z-index: 2;
+           background: rgba(14,20,32,.96); border: 1px solid #3a5280; box-shadow: 0 6px 20px rgba(0,0,0,.5); white-space: nowrap; }
+  #tools.on { display: flex; }
+  #tools button { font: 600 12px var(--font); padding: 7px 12px; border-radius: 5px; cursor: pointer; border: 0; background: transparent; color: #cfe0ff; }
+  #tools button:hover, #tools button.main { background: #1f3354; color: #fff; }
+  #tools button.main { box-shadow: inset 0 0 0 1px #4f7cc0; }
+  .factory #tools { background: #3a3530; border-color: #1a1816; } .factory #tools button { color: #e9dfcf; }
+  .factory #tools button.main, .factory #tools button:hover { background: #e39827; color: #1b1712; }
+  svg.fade { opacity: 0; } svg { transition: opacity .18s; }
   #hint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: rgba(10,14,21,.8); color: #8fa3c4; }
   #bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 4px 28px 0; align-items: start; }
   #feed { max-height: 340px; overflow-y: auto; }
@@ -79,7 +89,7 @@
   <div id="stats"></div>
   <div class="ctl"><span id="hits"></span><input id="search" type="search" placeholder="Search  ( / )" autocomplete="off" aria-label="Search the map"><button id="motion">Motion</button></div>
 </header>
-<div id="wrap"><svg id="map"></svg><div id="crumbs"></div><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
+<div id="wrap"><svg id="map"></svg><div id="crumbs"></div><div id="tools" role="toolbar"></div><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
 <div id="bottom"><div id="info"></div><div id="feed"><h3>ACTIVITY</h3><div style="display:block;opacity:.6;font-family:var(--font)">Static map. Open it through the board (python3 board.py) to see live activity.</div></div></div>
 <div class="legend" id="legend"></div>
 <script>
@@ -234,7 +244,7 @@ function render(t) {
   theme = t;
   document.body.className = [t, document.body.classList.contains("still") ? "still" : "", document.body.classList.contains("clean") ? "clean" : "", last ? "live" : ""].join(" ");
   document.querySelectorAll(".ctl [data-theme]").forEach(b => b.classList.toggle("on", b.dataset.theme === t));
-  svg.innerHTML = "";
+  svg.innerHTML = ""; document.getElementById("tools").classList.remove("on");
   const F = t === "factory", C = k => KINDS[k][F ? 2 : 1], EC = k => EDGES[k][F ? 2 : 1];
   el("defs").innerHTML = `
     <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -286,6 +296,9 @@ function render(t) {
 
   nodes.forEach(n => {
     const c = C(n.kind), g = el("g", { class: "node" + (n.outside ? " outside" : ""), "data-id": n.id, transform: `translate(${n.px},${n.py})` }); n._g = g;
+    n.kids = n.inner && n.inner.nodes ? n.inner.nodes.filter(m => !m.outside).length : 0;
+    if (n.kids) for (const o of [8, 4]) el("rect", { x: o, y: o, width: W, height: H, rx: F ? 3 : 7, fill: F ? "#2a2724" : "#0f1520",
+      stroke: c, "stroke-opacity": F ? .9 : .55, "stroke-width": 1.2 }, g);
     if (F) {
       el("rect", { width: W, height: H, rx: 3, fill: "url(#steel)", stroke: "#141210", "stroke-width": 2, filter: "url(#shadow)" }, g);
       el("rect", { x: 2, y: 2, width: W - 4, height: HEAD - 2, fill: n.kind === "human" ? "url(#hazard)" : "#3b3732" }, g);
@@ -309,18 +322,16 @@ function render(t) {
                  el("text", { x: W - 27, y: H - 8.5, "text-anchor": "middle", "font-size": 9, "font-weight": 800, fill: "#1a1206" }, g).textContent = "NEW"; }
     el("rect", { class: "hitring", x: -5, y: -5, width: W + 10, height: H + 10, rx: 11, fill: "none", stroke: "#ffe066", "stroke-width": 2.5, opacity: 0 }, g);
     if (n.outside) el("rect", { x: -3, y: -3, width: W + 6, height: H + 6, rx: 9, fill: "none", stroke: "#8b97ad", "stroke-dasharray": "3 4" }, g);
-    if (n.inner && n.inner.nodes && n.inner.nodes.length) {
-      const k = n.inner.nodes.filter(m => !m.outside).length, o = el("g", { class: "open", transform: `translate(${W - 64},${H - 19})`, style: "cursor:pointer" }, g);
-      el("rect", { width: 56, height: 15, rx: 4, fill: F ? "#e39827" : "#4da3ff", "fill-opacity": F ? 1 : .22, stroke: F ? "#1b1712" : "#4da3ff" }, o);
-      el("text", { x: 28, y: 11, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: F ? "#1b1712" : "#cfe4ff" }, o).textContent = `open · ${k}`;
-      o.addEventListener("click", e => { e.stopPropagation(); if (!dragged) enter(n); });
-      g.addEventListener("dblclick", e => { e.stopPropagation(); enter(n); });
-    }
+    if (n.kids) el("text", { x: W - 22, y: 16, "text-anchor": "end", "font-size": 10.5, "font-weight": 700, fill: F ? "#ffcc66" : "#e6f0ff",
+      "fill-opacity": .9 }, g).textContent = `⧉ ${n.kids}`;
+    el("rect", { class: "selring", x: -6, y: -6, width: W + 6 + (n.kids ? 14 : 6), height: H + 6 + (n.kids ? 14 : 6), rx: 12, fill: "none",
+      stroke: F ? "#ffcc66" : "#ffffff", "stroke-width": 2 }, g);
     n._dot = el("circle", { class: "sdot", cx: W - 12, cy: HEAD / 2, r: 4, fill: STATUS.idle, opacity: last ? 1 : 0 }, g);
     n._live = el("text", { x: tx, y: H - 9, fill: F ? "#e9c88a" : "#7f93b5", "font-size": 10, "font-family": "var(--mono)" }, g);
     g.addEventListener("mouseenter", () => { if (!pts.size) hover(n); });
     g.addEventListener("mouseleave", () => pinned ? hover(byId[pinned]) : clearHover());
-    g.addEventListener("click", e => { if (dragged) return; pinned = n.id; hover(n); e.stopPropagation(); });
+    g.addEventListener("click", e => { e.stopPropagation(); if (dragged) return;
+      if (pinned === n.id) mainAction(n); else select(n); });
   });
   const used = new Set(nodes.map(n => n.kind)), usedE = new Set(edges.map(e => e.kind));
   document.getElementById("legend").innerHTML = [...used].map(k => `<span><i style="background:${C(k)}"></i>${KINDS[k][0]}</span>`).join("") +
@@ -333,6 +344,48 @@ function render(t) {
 
 const info = document.getElementById("info");
 function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.remove("dim")); showIdle(); applySearch(); }
+// ---------------- selection and actions: one toolbar, every feature adds an entry to ACTIONS ----------------
+// Gestures: hover = preview, click/tap = select (+ toolbar), click again / double-click / Enter = main action,
+// drag on the canvas = pan, Esc = deselect (or go back), Backspace = go back.
+const ACTIONS = [
+  { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => n.kids > 0, run: n => enter(n), main: true },
+  { id: "zoom", label: () => "Zoom to", when: () => true, run: n => focusOn(n) },
+];
+const tools = document.getElementById("tools");
+function select(n) {
+  pinned = n ? n.id : null;
+  svg.querySelectorAll(".node.sel").forEach(x => x.classList.remove("sel"));
+  if (!n) { tools.classList.remove("on"); return; }
+  n._g.classList.add("sel"); hover(n);
+  const acts = ACTIONS.filter(a => a.when(n));
+  tools.innerHTML = acts.map(a => `<button data-a="${a.id}" class="${a.main ? "main" : ""}">${esc(a.label(n))}</button>`).join("");
+  tools.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ACTIONS.find(a => a.id === b.dataset.a).run(n); });
+  tools.classList.add("on"); placeTools();
+}
+function mainAction(n) { const a = ACTIONS.find(a => a.main && a.when(n)); if (a) a.run(n); }
+function placeTools() {
+  const n = pinned && byId[pinned]; if (!n || !tools.classList.contains("on")) return;
+  const x = (n.px + W / 2 - view.x) * view.s, top = (n.py - view.y) * view.s;
+  tools.style.left = Math.min(Math.max(x, 80), wrap.clientWidth - 80) + "px";
+  tools.style.top = (top > 52 ? top - 46 : (n.py + H - view.y) * view.s + 18) + "px";
+}
+function animateTo(tx, ty, ts, ms, done) {             // smooth pan/zoom; instant when motion is off
+  const still = document.body.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const x0 = view.x, y0 = view.y, s0 = view.s, t0 = performance.now(); let over = false;
+  const step = () => { if (over) return; const k = still ? 1 : Math.min(1, (performance.now() - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    view.s = s0 + (ts - s0) * e; view.x = x0 + (tx - x0) * e; view.y = y0 + (ty - y0) * e; view.fitted = false; applyView();
+    if (k < 1) requestAnimationFrame(step); else { over = true; if (done) done(); } };
+  if (still) return step();
+  requestAnimationFrame(step);
+  setTimeout(() => { if (!over) { view.s = ts; view.x = tx; view.y = ty; applyView(); over = true; if (done) done(); } }, ms + 80);   // hidden tabs pause frames
+}
+function boxView(n, share) {                            // view that shows box n filling `share` of the frame
+  const s = Math.min(3, wrap.clientWidth * share / W, wrap.clientHeight * share / H);
+  return [n.px + W / 2 - wrap.clientWidth / s / 2, n.py + H / 2 - wrap.clientHeight / s / 2, s];
+}
+function focusOn(n) { const [x, y] = boxView(n, .3); const s = Math.max(view.s, Math.min(1.2, boxView(n, .3)[2]));
+  animateTo(n.px + W / 2 - wrap.clientWidth / s / 2, n.py + H / 2 - wrap.clientHeight / s / 2, s, 350); }
+
 // ---------------- zoom into a box: open its inner map; breadcrumb, Backspace or Esc to go back ----------------
 function crumbs() {
   const c = document.getElementById("crumbs");
@@ -340,21 +393,28 @@ function crumbs() {
   c.innerHTML = stack.map((s, i) => `<button data-up="${stack.length - i}">${esc(s.title)}</button><span>›</span>`).join("") + `<b>${esc(LEVEL.title)}</b>`;
   c.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); up(+b.dataset.up); });
 }
+let entering = false;
 function enter(n) {
-  stack.push({ level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title });
-  load({ ...n.inner, title: n.title });
-  pinned = null; sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle();
+  if (entering) return; entering = true; select(null);
+  const back = { level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title };
+  const [tx, ty, ts] = boxView(n, .9);
+  animateTo(tx, ty, ts, 320, () => { svg.classList.add("fade"); setTimeout(() => {
+    stack.push(back); load({ ...n.inner, title: n.title });
+    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle(); svg.classList.remove("fade"); entering = false;
   info.innerHTML = `<h3>INSIDE ${esc(n.title.toUpperCase())}</h3>${esc(n.detail || n.sub || "")}\nDashed boxes are outside parts this box connects to. Backspace or the breadcrumb goes back.`;
+  }, 140); });
 }
 function up(k = 1) {
   if (!stack.length) return;
   let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
-  load(s.level); pinned = null; sbox.value = ""; hitAt = -1; render(theme);
+  select(null); load(s.level); sbox.value = ""; hitAt = -1; render(theme);
   Object.assign(view, s.view); applyView(); crumbs(); showIdle();
 }
 document.addEventListener("keydown", e => {
-  if (document.activeElement === sbox || !stack.length) return;
-  if (e.key === "Backspace" || e.key === "Escape") { e.preventDefault(); up(); }
+  if (document.activeElement === sbox) return;
+  if (e.key === "Enter" && pinned) { e.preventDefault(); mainAction(byId[pinned]); return; }
+  if (e.key === "Escape" && pinned) { select(null); clearHover(); return; }
+  if ((e.key === "Backspace" || e.key === "Escape") && stack.length) { e.preventDefault(); up(); }
 });
 // ---------------- search: title, text, model, id; Enter jumps to the next hit, Esc clears, "/" focuses ----------------
 const sbox = document.getElementById("search"), hitsEl = document.getElementById("hits");
@@ -377,7 +437,7 @@ sbox.addEventListener("keydown", e => {
   if (e.key === "Escape") { sbox.value = ""; hitAt = -1; clearHover(); sbox.blur(); return; }
   if (e.key !== "Enter" || !hits.length) return;
   e.preventDefault(); hitAt = (hitAt + (e.shiftKey ? hits.length - 1 : 1)) % hits.length;
-  const n = hits[hitAt]; jump(n); hover(n); applySearch(); svg.querySelector(`.node[data-id="${CSS.escape(n.id)}"]`).classList.remove("dim");
+  const n = hits[hitAt]; jump(n); select(n); applySearch(); svg.querySelector(`.node[data-id="${CSS.escape(n.id)}"]`).classList.remove("dim");
 });
 document.addEventListener("keydown", e => { if (e.key === "/" && document.activeElement !== sbox) { e.preventDefault(); sbox.focus(); } });
 function showIdle() { info.innerHTML = `<h3>DETAILS</h3>Hover or tap a box to see what it does, what it connects to${last ? " and what it is doing now" : ""}.`; }
@@ -388,7 +448,7 @@ function hover(n) {
   svg.querySelectorAll(".node").forEach(x => x.classList.toggle("dim", !near.has(x.dataset.id)));
   const inn = edges.filter(e => e.to === n.id).map(e => byId[e.from].title), out = edges.filter(e => e.from === n.id).map(e => byId[e.to].title);
   const st = last?.nodes?.[n.id];
-  const inner = n.inner && n.inner.nodes ? `\n<span style="color:#4da3ff">▸ contains ${n.inner.nodes.filter(m => !m.outside).length} parts: double-click or press “open”</span>` : "";
+  const inner = n.inner && n.inner.nodes ? `\n<span style="color:#4da3ff">⧉ contains ${n.inner.nodes.filter(m => !m.outside).length} parts: click again, double-click or Enter to open</span>` : "";
   info.innerHTML = `<h3>${esc(n.title.toUpperCase())} · ${esc(KINDS[n.kind][0])}${n.model ? " · " + esc(n.model) : ""}</h3>${esc(n.detail || n.sub)}` +
     (inn.length ? `\n<span style="opacity:.65">from:</span> ${esc(inn.join(", "))}` : "") + (out.length ? `\n<span style="opacity:.65">to:</span> ${esc(out.join(", "))}` : "") +
     (st ? `\n\n<b style="color:${STATUS[st.status] || STATUS.idle}">● ${esc(st.status)}</b> ${esc(st.line)}${st.detail ? "\n" + esc(st.detail) : ""}` : "") + inner;
@@ -408,6 +468,7 @@ function applyView() {
   view.x = VW <= vw ? (VW - vw) / 2 : Math.min(Math.max(view.x, 0), VW - vw);
   view.y = VH <= vh ? (VH - vh) / 2 : Math.min(Math.max(view.y, 0), VH - vh);
   svg.setAttribute("viewBox", `${view.x} ${view.y} ${vw} ${vh}`);
+  if (typeof placeTools === "function") placeTools();
 }
 function fit() { view.s = fitScale(); view.x = view.y = 0; view.fitted = true; applyView(); }
 function zoomAt(f, cx, cy) {                            // cx, cy: point in the frame that stays put
@@ -439,7 +500,7 @@ wrap.addEventListener("pointermove", e => {
 const lift = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) wrap.classList.remove("drag"); };
 wrap.addEventListener("pointerup", lift); wrap.addEventListener("pointercancel", lift);
 wrap.addEventListener("click", e => { if (dragged && !e.target.closest("#zoom")) { e.stopPropagation(); e.preventDefault(); } dragged = false; }, true);
-svg.addEventListener("click", e => { if (!e.target.closest(".node")) { pinned = null; clearHover(); } });
+svg.addEventListener("click", e => { if (!e.target.closest(".node") && !dragged) { select(null); clearHover(); } });
 wrap.addEventListener("wheel", e => {                   // plain scrolling keeps scrolling the page
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault(); const r = wrap.getBoundingClientRect();
@@ -459,7 +520,7 @@ function apply(s) {
   last = s; document.body.classList.add("live");
   for (const n of nodes) {
     const st = s.nodes[n.id] || { status: "idle", line: "" };
-    n._g.setAttribute("class", `node status-${st.status}${n.outside ? " outside" : ""}`);
+    n._g.classList.remove(...[...n._g.classList].filter(c => c.startsWith("status-"))); n._g.classList.add(`status-${st.status}`);
     n._dot.setAttribute("fill", STATUS[st.status] || STATUS.idle); n._dot.setAttribute("opacity", 1);
     const line = st.line || ""; n._live.textContent = line.length > 36 ? line.slice(0, 35) + "…" : line;
     n._live.setAttribute("fill", st.status === "idle" ? (theme === "factory" ? "#a89a86" : "#5f7090") : STATUS[st.status]);
