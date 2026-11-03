@@ -50,7 +50,7 @@ your own with an `inner` field on any box.
 | Gesture | Does |
 |---|---|
 | Hover | preview: its connections light up, details below the map |
-| Click / tap | select: a ring, the details stay, and a toolbar with what you can do with this box |
+| Click / tap | select: a ring, the details stay, and a toolbar with what you can do with this box (if anything) |
 | Click again, double-click, Enter | the main action: open a box that has an inside |
 | Drag the canvas, pinch, Ctrl+scroll | move and zoom |
 | `/` | search; Enter jumps from hit to hit |

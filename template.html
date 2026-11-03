@@ -37,11 +37,10 @@
            background: rgba(14,20,32,.96); border: 1px solid #3a5280; box-shadow: 0 6px 20px rgba(0,0,0,.5); white-space: nowrap; }
   #tools.on { display: flex; }
   #tools button { font: 600 12px var(--font); padding: 7px 12px; border-radius: 5px; cursor: pointer; border: 0; background: transparent; color: #cfe0ff; }
-  #tools button:hover, #tools button.main { background: #1f3354; color: #fff; }
-  #tools button.main { box-shadow: inset 0 0 0 1px #4f7cc0; }
+  #tools button:hover, #tools button:focus-visible { background: #1f3354; color: #fff; outline: none; }
   .factory #tools { background: #3a3530; border-color: #1a1816; } .factory #tools button { color: #e9dfcf; }
-  .factory #tools button.main, .factory #tools button:hover { background: #e39827; color: #1b1712; }
-  svg.fade { opacity: 0; } svg { transition: opacity .18s; }
+  .factory #tools button:hover { background: #e39827; color: #1b1712; }
+  svg.fade { opacity: 0; } svg { transition: opacity .16s ease; }
   #hint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: rgba(10,14,21,.8); color: #8fa3c4; }
   #bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 4px 28px 0; align-items: start; }
   #feed { max-height: 340px; overflow-y: auto; }
@@ -349,7 +348,6 @@ function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.re
 // drag on the canvas = pan, Esc = deselect (or go back), Backspace = go back.
 const ACTIONS = [
   { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => n.kids > 0, run: n => enter(n), main: true },
-  { id: "zoom", label: () => "Zoom to", when: () => true, run: n => focusOn(n) },
 ];
 const tools = document.getElementById("tools");
 function select(n) {
@@ -358,33 +356,18 @@ function select(n) {
   if (!n) { tools.classList.remove("on"); return; }
   n._g.classList.add("sel"); hover(n);
   const acts = ACTIONS.filter(a => a.when(n));
-  tools.innerHTML = acts.map(a => `<button data-a="${a.id}" class="${a.main ? "main" : ""}">${esc(a.label(n))}</button>`).join("");
+  tools.innerHTML = acts.map(a => `<button data-a="${a.id}">${esc(a.label(n))}</button>`).join("");
   tools.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ACTIONS.find(a => a.id === b.dataset.a).run(n); });
-  tools.classList.add("on"); placeTools();
+  tools.classList.toggle("on", acts.length > 0); placeTools();
 }
 function mainAction(n) { const a = ACTIONS.find(a => a.main && a.when(n)); if (a) a.run(n); }
 function placeTools() {
   const n = pinned && byId[pinned]; if (!n || !tools.classList.contains("on")) return;
   const x = (n.px + W / 2 - view.x) * view.s, top = (n.py - view.y) * view.s;
   tools.style.left = Math.min(Math.max(x, 80), wrap.clientWidth - 80) + "px";
-  tools.style.top = (top > 52 ? top - 46 : (n.py + H - view.y) * view.s + 18) + "px";
+  const h = tools.offsetHeight || 38, lap = Math.min(14, H * view.s * .3);       // sits over the box's top edge
+  tools.style.top = (top - h + lap > 4 ? top - h + lap : (n.py + H - view.y) * view.s - lap) + "px";
 }
-function animateTo(tx, ty, ts, ms, done) {             // smooth pan/zoom; instant when motion is off
-  const still = document.body.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const x0 = view.x, y0 = view.y, s0 = view.s, t0 = performance.now(); let over = false;
-  const step = () => { if (over) return; const k = still ? 1 : Math.min(1, (performance.now() - t0) / ms), e = 1 - Math.pow(1 - k, 3);
-    view.s = s0 + (ts - s0) * e; view.x = x0 + (tx - x0) * e; view.y = y0 + (ty - y0) * e; view.fitted = false; applyView();
-    if (k < 1) requestAnimationFrame(step); else { over = true; if (done) done(); } };
-  if (still) return step();
-  requestAnimationFrame(step);
-  setTimeout(() => { if (!over) { view.s = ts; view.x = tx; view.y = ty; applyView(); over = true; if (done) done(); } }, ms + 80);   // hidden tabs pause frames
-}
-function boxView(n, share) {                            // view that shows box n filling `share` of the frame
-  const s = Math.min(3, wrap.clientWidth * share / W, wrap.clientHeight * share / H);
-  return [n.px + W / 2 - wrap.clientWidth / s / 2, n.py + H / 2 - wrap.clientHeight / s / 2, s];
-}
-function focusOn(n) { const [x, y] = boxView(n, .3); const s = Math.max(view.s, Math.min(1.2, boxView(n, .3)[2]));
-  animateTo(n.px + W / 2 - wrap.clientWidth / s / 2, n.py + H / 2 - wrap.clientHeight / s / 2, s, 350); }
 
 // ---------------- zoom into a box: open its inner map; breadcrumb, Backspace or Esc to go back ----------------
 function crumbs() {
@@ -397,18 +380,23 @@ let entering = false;
 function enter(n) {
   if (entering) return; entering = true; select(null);
   const back = { level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title };
-  const [tx, ty, ts] = boxView(n, .9);
-  animateTo(tx, ty, ts, 320, () => { svg.classList.add("fade"); setTimeout(() => {
+  crossFade(() => {
     stack.push(back); load({ ...n.inner, title: n.title });
-    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle(); svg.classList.remove("fade"); entering = false;
+    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); showIdle(); entering = false;
   info.innerHTML = `<h3>INSIDE ${esc(n.title.toUpperCase())}</h3>${esc(n.detail || n.sub || "")}\nDashed boxes are outside parts this box connects to. Backspace or the breadcrumb goes back.`;
-  }, 140); });
+  });
+}
+function crossFade(swap) {                               // fade out, swap the drawing, fade in
+  const still = document.body.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still) return swap();
+  svg.classList.add("fade");
+  setTimeout(() => { swap(); requestAnimationFrame(() => svg.classList.remove("fade")); setTimeout(() => svg.classList.remove("fade"), 60); }, 160);
 }
 function up(k = 1) {
   if (!stack.length) return;
   let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
-  select(null); load(s.level); sbox.value = ""; hitAt = -1; render(theme);
-  Object.assign(view, s.view); applyView(); crumbs(); showIdle();
+  select(null);
+  crossFade(() => { load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); showIdle(); });
 }
 document.addEventListener("keydown", e => {
   if (document.activeElement === sbox) return;
