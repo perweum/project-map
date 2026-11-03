@@ -22,6 +22,11 @@ U, W, H = 20, 220, 80                                   # keep in step with temp
 nodes = M.get("nodes", [])
 free = bool(nodes) and all("x" in n and "y" in n for n in nodes)
 cols = M.get("columns") or []
+FORMAT_VERSION = 1
+v = M.get("version", 1)          # maps written before the field existed are version 1
+if not isinstance(v, int) or v < 1: errs.append(f"version must be a whole number >= 1, got {v!r}")
+elif v > FORMAT_VERSION: errs.append(f"map format version {v} is newer than this renderer understands ({FORMAT_VERSION}): update project-map")
+if "version" not in M: warns.append('no "version" field: treated as version 1 (add "version": 1)')
 if not M.get("title"): errs.append("title missing")
 if not free:
     if any("x" in n or "y" in n for n in nodes): errs.append("give x and y to every node (free layout) or to none (columns)")

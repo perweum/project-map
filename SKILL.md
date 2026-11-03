@@ -45,13 +45,14 @@ Read the instruction files (`AGENTS.md`, `CLAUDE.md`, `README*`, `CONTRIBUTING*`
 
 Format reference:
 ```json
-{"title": "…", "subtitle": "what it is · updated <date>", "repo": "~/path/to/repo",
+{"version": 1, "title": "…", "subtitle": "what it is · updated <date>", "repo": "~/path/to/repo",
  "nodes": [{"id": "gens", "x": 18, "y": 10, "kind": "script", "title": "update.py + gen_*.py", "sub": "regenerate data",
             "detail": "…", "source": ["tools/update.py", "tools/gen_*.py"]}],
  "edges": [["gens", "data", "data"]],
  "groups": [{"label": "Generators", "nodes": ["gens"], "kind": "script"}],
  "ignore": [], "live": {}}
 ```
+`version` is the map format (currently 1); keep it, and never raise it by hand.
 Node kinds: `input`, `script`, `service` (CI, timers, containers), `module` (app code), `agent` (a model, costs tokens),
 `human`, `file` (hand-over file or folder), `output`. Edge kinds: `data`, `control` (starts/calls), `human`, `feedback`.
 

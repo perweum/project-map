@@ -60,6 +60,14 @@ class Fixture(unittest.TestCase):
             self.assertIn(e, self.edges)
         self.assertNotIn((n("widget-builder"), n("release.sh"), "control"), self.edges, "a 'never run' line is not a link")
 
+    def test_version(self):
+        self.assertEqual(self.map["version"], 1)
+        d = os.path.join(self.tmp, "maps", "ver"); os.makedirs(d, exist_ok=True)
+        future = {"version": 2, "title": "x", "nodes": [{"id": "a", "x": 0, "y": 0, "kind": "script", "title": "A"}], "edges": []}
+        json.dump(future, open(os.path.join(d, "map.json"), "w"))
+        r = subprocess.run([sys.executable, "-I", "-B", os.path.join(HERE, "render_map.py"), os.path.join(d, "map.json")], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0); self.assertIn("version 2", r.stderr)
+
     def test_model_and_layout(self):
         self.assertEqual(self.ids[self.node("widget-checker")]["model"], "some-model")
         boxes = [(n["x"], n["y"]) for n in self.map["nodes"]]

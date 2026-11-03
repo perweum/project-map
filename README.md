@@ -84,7 +84,7 @@ See `SKILL.md` for the `live` format.
 
 ```json
 {
-  "title": "My project", "repo": "~/code/my-project",
+  "version": 1, "title": "My project", "repo": "~/code/my-project",
   "nodes": [{"id": "gen", "x": 18, "y": 4, "kind": "script", "title": "build.py", "sub": "builds the site",
              "detail": "Shown on hover.", "source": ["tools/build.py"]}],
   "edges": [["gen", "site", "data"]],
@@ -93,7 +93,19 @@ See `SKILL.md` for the `live` format.
 ```
 
 Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` and `output`. Edge kinds are `data`, `control`, `human` and `feedback`.
+`version` is the format version (currently 1); maps without it are read as version 1, and a renderer refuses maps newer than it understands.
 `x`/`y` are grid units of 20 px. Wires are routed around boxes automatically. `render_map.py` rejects invalid maps with a list of problems.
+
+## Roadmap
+
+- [x] Automatic discovery, drift check, live agent board
+- [ ] Search box, and export to PNG/SVG from the page
+- [ ] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
+- [ ] Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
+- [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
+- [ ] Assets view: which images, fonts and icons a project uses and where they come from
+
+Ideas and bug reports are welcome as issues.
 
 ## Tests
 

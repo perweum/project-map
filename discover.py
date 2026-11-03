@@ -21,6 +21,7 @@ Every node carries `source` (the paths it came from); --check compares those wit
 import argparse, fnmatch, glob, json, os, re, subprocess, sys
 
 HOME = os.path.expanduser("~")
+FORMAT_VERSION = 1                                         # map.json format; render_map.py refuses newer maps
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".cache", "cache",
              "vendor", "target", ".tox", ".mypy_cache", ".pytest_cache", "site-packages", "coverage", ".idea", ".vscode"}
 SCRIPT_DIRS = ["tools", "scripts", "script", "bin", "tasks", "ops", "ci", "hack", "devtools"]
@@ -424,7 +425,7 @@ def draft(repo):
     for n in M.nodes.values():
         n = {k: v for k, v in n.items() if k not in ("glob", "unit")}
         nodes.append(n)
-    return {"title": M.name, "subtitle": f"draft from discover.py · {len(nodes)} parts found",
+    return {"version": FORMAT_VERSION, "title": M.name, "subtitle": f"draft from discover.py · {len(nodes)} parts found",
             "repo": tilde(M.repo), "nodes": nodes, "edges": sorted([list(e) for e in M.edges]), "groups": groups, "live": live_section(M)}
 
 # ---------------- drift ----------------
@@ -494,6 +495,7 @@ if __name__ == "__main__":
         sys.exit()
     if a.update:
         m = json.load(open(a.update, encoding="utf-8")); m["repo"] = m.get("repo") or tilde(os.path.abspath(a.repo))
+        m.setdefault("version", FORMAT_VERSION)
         m, added, stale = update(m, a.repo)
         json.dump(m, open(a.update, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
         print(f"updated {a.update}: {len(added)} added {added}, {len(stale)} marked stale {stale}")
