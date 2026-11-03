@@ -127,9 +127,13 @@ Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` 
 - [x] Search box
 - [x] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
 - [x] Trace: light up everything upstream and downstream of a box
-- [ ] Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
 - [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
 - [ ] Assets view: which images, fonts and icons a project uses and where they come from
+
+
+Maybe later, depending on how the tool gets used:
+
+- Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
 
 Ideas and bug reports are welcome as issues.
 
