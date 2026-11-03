@@ -50,13 +50,14 @@ your own with an `inner` field on any box.
 | Gesture | Does |
 |---|---|
 | Hover | preview: its connections light up |
-| Click / tap | select: a ring and a toolbar with **Open** (boxes with an inside) and **Details** |
+| Click / tap | select: a ring and a toolbar with **Open** (boxes with an inside), **Trace** and **Details** |
+| Trace | everything the box depends on (upstream, purple) and everything it affects (downstream, cyan) lights up; the rest fades. It follows your selection; feedback links are not followed, so loops don't light up the whole map |
 | Details | a drawer with the description, live status, what it gets from and feeds into (click to jump), and its source files. It follows your selection until you close it |
 | Click again, double-click, Enter | the main action: open a box that has an inside, otherwise show its details |
 | Drag the canvas, pinch, Ctrl+scroll | move and zoom |
 | `/` | search; Enter jumps from hit to hit |
 | Legend entries | click a kind (script, input …) or link type to show only those; click more to add, "show all" to reset |
-| Esc, Backspace | close the drawer, deselect, go back out |
+| Esc, Backspace | close the drawer, stop the trace, deselect, go back out |
 
 ## Keeping a map up to date
 
@@ -125,6 +126,7 @@ Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` 
 - [x] Automatic discovery, drift check, live agent board
 - [x] Search box
 - [x] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
+- [x] Trace: light up everything upstream and downstream of a box
 - [ ] Screens & flows view for designers: each screen as a box with a screenshot thumbnail, links to design files
 - [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
 - [ ] Assets view: which images, fonts and icons a project uses and where they come from
