@@ -89,8 +89,9 @@ python3 board.py --open     # starts the board (unless it already runs) and open
 python3 board.py --open my-project   # straight to one map
 ```
 
-The page's **LIVE** chip opens the activity feed in the drawer; click a line to jump to that box. A saved `map.html`
-opened as a file shows "static map · live view?" there instead, with these instructions.
+On the live board, the **LIVE** chip opens the activity feed in the drawer; click a line to jump to that box.
+A saved `map.html` shows **Live view →** instead: it goes straight to the live map when the board runs, and otherwise
+shows the exact command to start it, with a copy button.
 
 Add a `live` section to a map (`discover.py` drafts one) and boxes light up while work happens:
 

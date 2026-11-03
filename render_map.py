@@ -118,6 +118,10 @@ if M.get("repo") and os.path.isdir(os.path.expanduser(M["repo"])):    # drift: i
     for s in d["stale"]: warns.append(f"drift: {s} points at files that are gone")
     for s in d["new"][:15]: warns.append(f"drift: not on the map yet: {s}")
 if a.theme: M["theme"] = a.theme
+folder = os.path.dirname(os.path.abspath(a.out or a.map)); parent = os.path.dirname(folder)
+home = os.path.expanduser("~"); tl = lambda p: "~" + p[len(home):] if p.startswith(home + "/") else p
+cmd = f"python3 {tl(os.path.join(HERE, 'board.py'))}" + ("" if parent == os.path.join(home, "agent-maps") else f" --root {tl(parent)}") + f" --open {os.path.basename(folder)}"
+M["_board"] = {"project": os.path.basename(folder), "cmd": cmd}
 data = json.dumps(M, ensure_ascii=False).replace("</", "<\\/")
 page = open(os.path.join(HERE, "template.html"), encoding="utf-8").read().replace("/*MAP_DATA*/null", data, 1)
 out = a.out or os.path.join(os.path.dirname(os.path.abspath(a.map)), "map.html")

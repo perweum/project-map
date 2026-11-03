@@ -58,6 +58,8 @@
   #drawer .links button, #drawer .act { font: 600 12px var(--font); padding: 5px 10px; border-radius: 5px; cursor: pointer; border: 1px solid #2c3b55;
                                         background: #121a29; color: #cfe0ff; } #drawer .links button:hover, #drawer .act:hover { border-color: #4f7cc0; color: #fff; }
   #drawer .act { margin-top: 4px; padding: 7px 12px; }
+  #drawer .cmd { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.35); margin: 8px 0; }
+  #drawer .cmd code { flex: 1; } #drawer .cmd .act { margin: 0; flex: none; } #drawer a { color: #7ab8ff; }
   #drawer code { font: 11.5px var(--mono); opacity: .8; word-break: break-all; }
   #drawer .feed div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05);
                       font-size: 12px; cursor: pointer; } #drawer .feed div:hover { background: rgba(255,255,255,.04); }
@@ -78,7 +80,7 @@
   .live .edge.active path:nth-child(2) { stroke-opacity: 1; stroke-width: 2.4; }
   .status-working .glow { animation: pulse 1.1s ease-in-out infinite; } .status-working .sdot { animation: pulse .8s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .2; } }
-  body.clean #drawer, body.clean #zoom, body.clean #search, body.clean #hits, body.clean #hint, body.clean .ctl { display: none !important; }
+  body.clean #drawer, body.clean #stats, body.clean #zoom, body.clean #search, body.clean #hits, body.clean #hint, body.clean .ctl { display: none !important; }
   body.still .flow, body.still .glow, body.still .sdot { animation: none !important; }
   @media (prefers-reduced-motion: reduce) { .flow, .glow, .sdot { animation: none !important; } }
 
@@ -413,18 +415,35 @@ function openDetails(n) {
 function liveChip() {
   const t = last?.totals || {};
   return last ? `<button class="chip" id="livechip" title="Show the activity feed"><span class="dot" style="background:${t.working ? STATUS.working : STATUS.idle}"></span>LIVE · <b>${t.working || 0}</b> working · activity</button>`
-              : `<button class="chip" id="livechip" title="How to see live agent activity"><span class="dot" style="background:${STATUS.idle}"></span>static map · live view?</button>`;
+              : `<button class="chip" id="livechip" title="Open this map on the live board"><span class="dot" style="background:${STATUS.working}"></span>Live view →</button>`;
 }
-function toggleActivity() { if (drawerMode === "activity") closeDrawer(); else openActivity(); }
+const BOARD = MAP._board || { project: "", cmd: "python3 board.py --open" };
+const liveUrl = `http://127.0.0.1:8765/${encodeURIComponent(BOARD.project)}/`;
+async function boardUp() {                               // works from a file:// page too (opaque reply = something answers)
+  try { const c = new AbortController(); setTimeout(() => c.abort(), 900);
+        await fetch("http://127.0.0.1:8765/", { mode: "no-cors", cache: "no-store", signal: c.signal }); return true; } catch (_) { return false; }
+}
+async function toggleActivity() {
+  if (drawerMode === "activity") return closeDrawer();
+  if (!last && await boardUp()) { location.href = liveUrl; return; }   // board running: go straight to the live map
+  openActivity();
+}
+function copyText(text, btn) {
+  const done = () => { btn.textContent = "Copied ✓"; setTimeout(() => btn.textContent = "Copy", 1600); };
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(done, () => fallback());
+  fallback();
+  function fallback() { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select();
+    try { document.execCommand("copy"); done(); } catch (_) { btn.textContent = "Select and copy"; } t.remove(); }
+}
 function openActivity() {
   drawerMode = "activity"; drawer.dataset.id = "";
   let body;
   if (!last) {
-    const proj = decodeURIComponent(location.pathname.split("/").slice(-2, -1)[0] || "<project>");
-    body = `<p>This is a saved copy of the map, so it cannot show what your agents are doing.</p>
-      <p>The live board shows the same map with working boxes glowing, each agent's current step and an activity feed.
-      Start it (it keeps running in the background) and open it in your browser:</p>
-      <p><code>python3 board.py --open</code></p><p>Then this map is at <code>http://127.0.0.1:8765/${esc(proj)}/</code></p>`;
+    body = `<p>The live board shows this map with working boxes glowing, each agent's current step and an activity feed.
+      It is not running right now. Paste this in a terminal; it starts the board and opens this map:</p>
+      <div class="cmd"><code>${esc(BOARD.cmd)}</code><button class="act" data-copy>Copy</button></div>
+      <p>Afterwards the map is always at <a href="${liveUrl}">${esc(liveUrl.replace("http://", ""))}</a>, worth a bookmark.
+      This button then takes you straight there.</p>`;
   } else {
     const title = id => topById[id]?.title || id;
     body = (last.feed || []).slice(0, 40).map(f => `<div data-node="${esc(f.node)}"><span style="opacity:.6">${new Date(f.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>` +
@@ -433,8 +452,9 @@ function openActivity() {
     body = `<div class="feed">${body}</div>`;
   }
   const keep = drawer.scrollTop;
-  drawer.innerHTML = `<button class="x" title="Close (Esc)">×</button><div class="kind" style="color:${STATUS.working}">${last ? "live" : "live view"}</div><h2>Activity</h2>${body}`;
+  drawer.innerHTML = `<button class="x" title="Close (Esc)">×</button><div class="kind" style="color:${STATUS.working}">live view</div><h2>${last ? "Activity" : "Start the live view"}</h2>${body}`;
   drawer.querySelector(".x").onclick = () => closeDrawer();
+  drawer.querySelector("[data-copy]")?.addEventListener("click", e => copyText(BOARD.cmd, e.currentTarget));
   drawer.querySelectorAll(".feed [data-node]").forEach(d => d.onclick = () => { const m = byId[d.dataset.node]; if (m) { jump(m); select(m); } });
   drawer.classList.add("on"); drawer.scrollTop = keep;
 }
