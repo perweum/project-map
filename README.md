@@ -10,7 +10,7 @@ comes out. Optionally, a local live board shows which agent is working and on wh
 - **Yours to tidy.** The map is a plain `map.json`; rename, regroup and move boxes by hand, or let a coding agent do it with the included skill.
 - **Stays true.** Each box remembers the files it came from. When scripts or workflows appear or disappear, the map says it is out of date and `--update` adds the new parts.
 - **Works anywhere.** The output is one HTML file: open it in any browser, drag to move, pinch or Ctrl+scroll to zoom. It works on phones too.
-- **Light.** Python 3.9+ standard library only. No dependencies, no build step, and nothing leaves your machine.
+- **Light.** Python 3.10+ standard library only. No dependencies, no build step, and nothing leaves your machine.
 
 ## Quick start
 

@@ -10,7 +10,7 @@ description: >
 
 # Project map
 
-The scripts sit next to this file; below, `<skill>` means this skill's folder. They need only Python 3.9+.
+The scripts sit next to this file; below, `<skill>` means this skill's folder. They need only Python 3.10+.
 The map is data (`map.json`); the look comes from the shared renderer. Never invent parts: the discovery script
 finds facts, you add names, grouping and descriptions. If unsure whether something exists, leave it out and say so.
 
