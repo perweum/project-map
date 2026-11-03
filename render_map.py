@@ -4,7 +4,7 @@
 
 Run:  python3 -I -B render_map.py <path/to/map.json> [--out map.html] [--png shot.png] [--index]
 Exit 1 with a list of problems if the map is invalid (nothing is written then)."""
-import argparse, html, json, os, re, shutil, subprocess, sys
+import argparse, collections, html, json, os, re, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = {"input", "script", "agent", "human", "file", "output", "service", "module"}
@@ -60,7 +60,7 @@ if free and not errs:
                 errs.append(f"{na['id']} and {nb['id']} overlap or are closer than one grid unit (boxes are {W // U}x{H // U} units)")
 linked = set()
 for e in M.get("edges", []):
-    f, t, k = (e + [None, None, "data"])[:3] if isinstance(e, list) else (e.get("from"), e.get("to"), e.get("kind", "data"))
+    f, t, k = ((e + [None, None])[:2] + [e[2] if len(e) > 2 else "data"]) if isinstance(e, list) else (e.get("from"), e.get("to"), e.get("kind", "data"))
     for x in (f, t):
         if x not in ids: errs.append(f"edge {f}->{t}: unknown node {x!r}")
     if k not in EDGE_KINDS: errs.append(f"edge {f}->{t}: kind {k!r} not in {sorted(EDGE_KINDS)}")
@@ -93,12 +93,15 @@ def check_inner(n, path, depth=1):
         if not m.get("title"): errs.append(f"{where} {i}: title missing")
         check_inner(m, f"{where} {i}", depth + 1)
     for e in inn.get("edges", []):
-        f, t, k = (e + [None, None, "data"])[:3] if isinstance(e, list) else (e.get("from"), e.get("to"), e.get("kind", "data"))
+        f, t, k = ((e + [None, None])[:2] + [e[2] if len(e) > 2 else "data"]) if isinstance(e, list) else (e.get("from"), e.get("to"), e.get("kind", "data"))
         if f not in seen or t not in seen: errs.append(f"{where}: edge {f}->{t} names an unknown node")
         if k not in EDGE_KINDS: errs.append(f"{where}: edge {f}->{t} kind {k!r} not in {sorted(EDGE_KINDS)}")
     for g in inn.get("groups", []):
         if [x for x in g.get("nodes", []) if x not in seen]: errs.append(f"{where}: group {g.get('label')!r} names an unknown node")
 for n in nodes: check_inner(n, n.get("id"))
+zcount = collections.Counter(x for g in M.get("groups", []) for x in g.get("nodes", []))
+for x, k in zcount.items():
+    if k > 1: warns.append(f"{x} is in {k} zones: a box belongs in one zone (the page's Arrange mode keeps it that way)")
 live = M.get("live") or {}
 for kind in ("sessions", "files", "units", "git", "process"):
     for r in live.get(kind, []):

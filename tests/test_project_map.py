@@ -133,6 +133,52 @@ class Fixture(unittest.TestCase):
         self.assertEqual(s["nodes"]["q"]["status"], "waiting")
         self.assertIn("2", s["nodes"]["q"]["line"])
 
+    def test_board_save(self):
+        import threading, urllib.request, urllib.error
+        root = os.path.join(self.tmp, "board"); os.makedirs(os.path.join(root, "w"), exist_ok=True)
+        m = {"version": 1, "title": "w", "nodes": [{"id": "a", "x": 0, "y": 0, "kind": "script", "title": "A"},
+             {"id": "b", "x": 20, "y": 0, "kind": "input", "title": "B"}], "edges": [["a", "b"]], "groups": [{"label": "Z", "nodes": ["a"], "kind": "script"}]}
+        path = os.path.join(root, "w", "map.json"); json.dump(m, open(path, "w"))
+        subprocess.run([sys.executable, "-I", "-B", os.path.join(HERE, "render_map.py"), path], capture_output=True)
+        srv = board.ThreadingHTTPServer(("127.0.0.1", 0), board.handler(root)); port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        def post(body, token=board.TOKEN, host=None, origin=None):
+            h = {"Content-Type": "application/json", "X-Board-Token": token}
+            if host: h["Host"] = host
+            if origin: h["Origin"] = origin
+            r = urllib.request.Request(f"http://127.0.0.1:{port}/w/save", json.dumps(body).encode(), h, method="POST")
+            try: return urllib.request.urlopen(r).status
+            except urllib.error.HTTPError as e: return e.code
+        try:
+            page = urllib.request.urlopen(f"http://127.0.0.1:{port}/w/map.html").read().decode()
+            self.assertIn(json.dumps(board.TOKEN), page, "the served page carries the token")
+            good = {"positions": {"a": [0, 6], "b": [20, 6]}, "groups": [{"label": "Both", "nodes": ["a", "b"], "kind": "input"}]}
+            self.assertEqual(post(good, token="wrong"), 403)
+            self.assertEqual(post(good, origin="https://evil.example"), 403)
+            self.assertEqual(post(good, host="evil.example"), 403)
+            self.assertEqual(post({**good, "positions": {"a": [0, 6]}}), 400)
+            self.assertEqual(post({**good, "groups": [{"label": "X", "nodes": ["zz"], "kind": "input"}]}), 400)
+            self.assertEqual(post({**good, "groups": [{"label": "X", "nodes": ["a"], "kind": "robot"}]}), 400)
+            self.assertEqual(json.load(open(path))["nodes"][0]["y"], 0, "refused requests change nothing")
+            self.assertEqual(post(good, origin=f"http://127.0.0.1:{port}"), 200)
+            saved = json.load(open(path))
+            self.assertEqual([n["y"] for n in saved["nodes"]], [6, 6])
+            self.assertEqual(saved["groups"], [{"label": "Both", "nodes": ["a", "b"], "kind": "input"}])
+            self.assertEqual(saved["edges"], [["a", "b"]], "only positions and zones change")
+            self.assertTrue(os.path.exists(path + ".bak"))
+        finally:
+            srv.shutdown()
+
+    def test_update_joins_zone(self):
+        m = json.loads(json.dumps(self.map))
+        sid = self.node("gen_data.py")
+        m["nodes"] = [n for n in m["nodes"] if n["id"] != sid]
+        m["edges"] = [e for e in m["edges"] if sid not in e[:2]]
+        m["groups"] = [{"label": "Tools", "nodes": [n["id"] for n in m["nodes"] if n["kind"] == "script"], "kind": "script"}]
+        m2, added, _ = discover.update(m, self.repo)
+        self.assertIn(sid, added)
+        self.assertIn(sid, m2["groups"][0]["nodes"], "a new script joins the zone of the nearest script")
+
     def test_redaction(self):
         self.assertNotIn("abc123secretvalue", board.red("export API_TOKEN=abc123secretvalue && run"))
         self.assertNotIn("AKIAABCDEFGHIJKLMNOP", board.red("key AKIAABCDEFGHIJKLMNOP"))

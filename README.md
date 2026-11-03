@@ -59,6 +59,26 @@ your own with an `inner` field on any box.
 | Legend entries | click a kind (script, input …) or link type to show only those; click more to add, "show all" to reset |
 | Esc, Backspace | close the drawer, stop the trace, deselect, go back out |
 
+### Arrange: move boxes and edit zones
+
+Press **Arrange** in the header. Dragging now moves things instead of panning (a dotted grid shows it), and boxes snap to
+the grid. It only changes the drawing; your project is not touched.
+
+| In Arrange | Does |
+|---|---|
+| Drag a box | move it; a red outline means it would overlap and it springs back. Drop it in another zone to move it there, or well away from its zone to take it out |
+| Shift-click boxes | select several; drag one of them to move them together |
+| **New zone** (toolbar) | put the selected boxes in a new zone and type its name |
+| **Leave zone** (toolbar) | take a box out of its zone |
+| Drag a zone label | move the whole zone |
+| Click a zone label | **Rename**, **Colour**, **Ungroup** (double-click the label to rename straight away) |
+| Ctrl+Z / Undo | undo, step by step |
+| **Save** | write box positions and zones back to `map.json` (the old one is kept as `map.json.bak`) |
+
+A zone's frame always follows its boxes, and a box is in one zone at most. Save works on the live board; a `map.html`
+opened as a file offers **Download map.json** instead. Arrange works on the top level of a map, not inside an opened box.
+`discover.py --update` puts new boxes in the zone of the nearest box of the same kind.
+
 ## Keeping a map up to date
 
 ```bash
@@ -100,8 +120,10 @@ Add a `live` section to a map (`discover.py` drafts one) and boxes light up whil
 - files appearing in hand-over folders, and review verdicts;
 - systemd timers (next run, last result; Linux only, on macOS those boxes stay blank), open git branches and running processes.
 
-The board listens only on 127.0.0.1 and is read-only. It runs a fixed set of probes and never runs commands from a map.
-It does its work only while a page is open, and redacts secret-looking text in the feed.
+The board listens only on 127.0.0.1. It runs a fixed set of probes and never runs commands from a map. It does its work
+only while a page is open, and redacts secret-looking text in the feed. Its only write is **Save** in Arrange mode, which
+may change box positions and zones of that map and nothing else. Save needs a random token that the board puts into the
+pages it serves, and requests from other hosts or websites are refused.
 See `SKILL.md` for the `live` format.
 
 ## Map format
@@ -127,7 +149,8 @@ Node kinds are `input`, `script`, `service`, `module`, `agent`, `human`, `file` 
 - [x] Search box
 - [x] Zoom into a box: sub-maps for app modules and merged script boxes, drafted automatically
 - [x] Trace: light up everything upstream and downstream of a box
-- [ ] Drag boxes to arrange them and save the layout from the page; sticky notes on the canvas
+- [x] Arrange: drag boxes and zones, create, rename, recolour and remove zones, undo, save
+- [ ] Sticky notes on the canvas
 - [ ] Assets view: which images, fonts and icons a project uses and where they come from
 
 

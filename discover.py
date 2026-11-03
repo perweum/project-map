@@ -524,7 +524,7 @@ def drift(m, fresh=None):
     return {"stale": stale, "new": [f"{n['title']} ({', '.join(n['source'][:2])})" for n in new] + extra, "new_nodes": new, "new_sources": extra}
 
 def update(m, repo):
-    """Add new parts to an existing map next to nodes of the same kind; never move or delete what is there."""
+    """Add new parts to an existing map next to nodes of the same kind, in the zone of the nearest one; never move or delete what is there."""
     fresh = draft(repo); d = drift(m, fresh)
     ids = {n["id"] for n in m["nodes"]}
     def box(n): return (n["x"], n["y"], n["x"] + 11, n["y"] + 4)
@@ -537,6 +537,10 @@ def update(m, repo):
         while any(not (x + 12 <= a or a + 12 <= x or y + 5 <= b or b2 + 1 <= y) for a, b, a2, b2 in taken): y += 6
         n = {**n, "x": x, "y": y, "new": True}; n["id"] = n["id"] if n["id"] not in ids else n["id"] + "-new"
         taken.append(box(n)); m["nodes"].append(n); ids.add(n["id"]); added.append(n["id"])
+        if same:                                            # join the zone of the nearest box of the same kind
+            near = min(same, key=lambda o: abs(o["x"] - x) + abs(o["y"] - y))
+            z = next((g for g in m.get("groups", []) if near["id"] in g.get("nodes", [])), None)
+            if z is not None: z["nodes"].append(n["id"])
     for a, b, k in fresh["edges"]:
         if (a in added or b in added) and a in ids and b in ids and [a, b, k] not in m["edges"]: m["edges"].append([a, b, k])
     for n in m["nodes"]:

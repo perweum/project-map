@@ -79,6 +79,8 @@ facts. discover.py drafts a `live` section; check and adjust it. Only these read
   "git":      [{"node": "pr", "repo": "~/repo", "exclude": ["main", "t3/*"]}],
   "process":  [{"node": "app", "pattern": "<pgrep -f pattern>", "running": "app running", "stopped": "app closed"}]}
 ```
+The board also serves Arrange mode: the user can drag boxes and edit zones on the page and press Save, which rewrites
+only positions and `groups` in map.json. Re-read map.json before editing it, so you do not overwrite their layout.
 Session rules match a session's name plus the first 300 characters of its first prompt; the first matching rule wins.
 Verify with `python3 -I -B <skill>/board.py --once <project>`: every agent box should show its own sessions.
 

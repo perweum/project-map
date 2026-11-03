@@ -10,11 +10,14 @@
   git       local branches of a repo minus "exclude" patterns
   process   pgrep -f pattern
 
-Read-only and local: binds 127.0.0.1, runs only the fixed probes above (never commands from a map), and computes
-status only when a page asks. Tool arguments shown in the feed are shortened and secret-looking strings redacted.
+Local and read-only, with one exception: binds 127.0.0.1, runs only the fixed probes above (never commands from a map),
+and computes status only when a page asks. Tool arguments shown in the feed are shortened and secret-looking strings
+redacted. The one write is Save in the page's Arrange mode: POST /<project>/save may change only box positions and
+zones in that map.json (a backup goes to map.json.bak). It needs the random token the board puts into the pages it
+serves, and requests whose Host or Origin is not this board are refused, so other websites cannot write.
 Run: python3 -I -B board.py [--root ~/agent-maps] [--port 8765]      one-off: board.py --once <project>
 """
-import argparse, collections, datetime, fnmatch, glob, json, os, re, subprocess, sys, threading, time
+import argparse, collections, datetime, fnmatch, glob, hmac, json, os, re, secrets, shutil, subprocess, sys, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote
 
@@ -238,13 +241,72 @@ def rerender_if_stale(root, proj):
     if os.path.exists(j) and (not os.path.exists(h) or os.path.getmtime(h) < max(os.path.getmtime(j), os.path.getmtime(tpl))):
         subprocess.run([sys.executable, "-I", "-B", os.path.join(HERE, "render_map.py"), j, "--index"], capture_output=True, timeout=60)
 
+TOKEN = secrets.token_urlsafe(24)                        # new on every start; only pages served by this board know it
+KINDS = {"input", "script", "agent", "human", "file", "output", "service", "module"}
+
+def save_layout(path, body):
+    """Apply {"positions": {id: [x, y]}, "groups": [{"label", "nodes", "kind"}]} to map.json. Raises ValueError."""
+    m = json.load(open(path, encoding="utf-8"))
+    ids = [n["id"] for n in m.get("nodes", [])]
+    pos, groups = body.get("positions"), body.get("groups")
+    if not isinstance(pos, dict) or not isinstance(groups, list): raise ValueError("positions (object) and groups (list) are required")
+    if set(pos) != set(ids): raise ValueError("positions must name every box of the map, and only those")
+    taken = set()
+    for i, v in pos.items():
+        if not (isinstance(v, list) and len(v) == 2 and all(isinstance(c, (int, float)) and not isinstance(c, bool) and abs(c) <= 5000 for c in v)):
+            raise ValueError(f"bad position for {i!r}")
+    for x, y in [tuple(v) for v in pos.values()]:
+        if (x, y) in taken: raise ValueError("two boxes on the same spot")
+        taken.add((x, y))
+    clean, seen = [], set()
+    for g in groups:
+        if not isinstance(g, dict): raise ValueError("each zone must be an object")
+        label, nodes, kind = g.get("label"), g.get("nodes"), g.get("kind", "file")
+        if not isinstance(label, str) or not label.strip() or len(label) > 40: raise ValueError("zone labels are 1-40 characters")
+        if kind not in KINDS: raise ValueError(f"unknown zone colour {kind!r}")
+        if not isinstance(nodes, list) or not nodes or any(n not in pos for n in nodes): raise ValueError(f"zone {label!r} names unknown boxes")
+        if seen & set(nodes): raise ValueError("a box can be in one zone only")
+        seen |= set(nodes); clean.append({"label": label.strip(), "nodes": list(dict.fromkeys(nodes)), "kind": kind})
+    for n in m["nodes"]:
+        n["x"], n["y"] = pos[n["id"]]
+        n.pop("col", None); n.pop("row", None)
+    m.pop("columns", None)
+    old = {(g.get("label"), tuple(g.get("nodes", []))): g for g in m.get("groups", [])}
+    m["groups"] = [{**old.get((g["label"], tuple(g["nodes"])), {}), **g} for g in clean]   # keep any extra fields of unchanged zones
+    if os.path.exists(path): shutil.copy2(path, path + ".bak")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f: json.dump(m, f, indent=1, ensure_ascii=False); f.write("\n")
+    os.replace(tmp, path)
+
 def handler(root):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a): pass
         def send(self, code, body, ctype):
             self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        def local(self):                                  # refuse other hosts (DNS rebinding) and other sites (CSRF)
+            port = self.server.server_address[1]
+            ok = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+            if self.headers.get("Host") not in ok: return False
+            o = self.headers.get("Origin")
+            return o is None or o.replace("http://", "", 1) in ok and o.startswith("http://")
+        def do_POST(self):
+            parts = [p for p in unquote(urlparse(self.path).path).split("/") if p]
+            if len(parts) != 2 or parts[1] != "save" or parts[0].startswith(".") or not self.local():
+                return self.send(403, b"refused", "text/plain")
+            if not hmac.compare_digest(self.headers.get("X-Board-Token", ""), TOKEN): return self.send(403, b"bad or missing token: reload the page", "text/plain")
+            if not self.headers.get("Content-Type", "").startswith("application/json"): return self.send(415, b"json only", "text/plain")
+            size = int(self.headers.get("Content-Length") or 0)
+            if not 0 < size <= 2_000_000: return self.send(413, b"too large", "text/plain")
+            path = os.path.join(root, parts[0], "map.json")
+            if not os.path.isfile(path): return self.send(404, b"no such map", "text/plain")
+            try:
+                with CLOCK: save_layout(path, json.loads(self.rfile.read(size)))
+            except (ValueError, KeyError, TypeError) as e: return self.send(400, f"not saved: {e}".encode(), "text/plain")
+            except Exception as e: return self.send(500, f"board error: {e}".encode(), "text/plain")
+            self.send(200, b'{"ok": true}', "application/json")
         def do_GET(self):
+            if not self.local(): return self.send(403, b"refused", "text/plain")
             parts = [p for p in unquote(urlparse(self.path).path).split("/") if p]
             if any(p.startswith(".") for p in parts): return self.send(404, b"not found", "text/plain")
             try:
@@ -255,7 +317,8 @@ def handler(root):
                 if parts[1:] == ["status.json"]: return self.send(200, project_status(root, proj), "application/json")
                 if parts[1:] == ["map.html"]:
                     rerender_if_stale(root, proj)
-                    return self.send(200, open(os.path.join(root, proj, "map.html"), "rb").read(), "text/html; charset=utf-8")
+                    page = open(os.path.join(root, proj, "map.html"), "rb").read().replace(b'/*BOARD_TOKEN*/""', json.dumps(TOKEN).encode(), 1)
+                    return self.send(200, page, "text/html; charset=utf-8")
                 if parts[1:] == ["map.json"]: return self.send(200, open(os.path.join(root, proj, "map.json"), "rb").read(), "application/json")
             except Exception as e:   # keep serving; show the problem to the page
                 return self.send(500, f"board error: {e}".encode(), "text/plain")

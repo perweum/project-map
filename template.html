@@ -35,6 +35,16 @@
   #crumbs b { padding: 5px 10px; border-radius: 5px; background: #1d2b44; color: #fff; border: 1px solid #4f7cc0; }
   #crumbs span { opacity: .5; }
   .node.outside { opacity: .55; }
+  body.arranging .node { cursor: move; } body.arranging .glabel { cursor: move; }
+  body.arranging #map { background-image: radial-gradient(rgba(120,160,220,.22) 1px, transparent 1px); background-size: 20px 20px; }
+  .node.bad .selring { opacity: 1; stroke: #ff5c6c !important; stroke-dasharray: 6 4; }
+  .node.moving { opacity: .9; } .edge.moving { opacity: .08; }
+  .zone.drop .zframe { stroke-opacity: 1 !important; stroke-width: 2.5; fill-opacity: .14 !important; }
+  .zone.zsel .zframe { stroke-opacity: 1 !important; stroke-width: 2; stroke-dasharray: none; }
+  #arrange.on { background: #1f3354 !important; color: #fff !important; border-color: #4f7cc0 !important; }
+  #save.dirty { background: #2a6b3c !important; color: #fff !important; border-color: #5fe08a !important; }
+  #rename { position: absolute; z-index: 4; font: 700 12px var(--font); letter-spacing: .08em; padding: 4px 8px; border-radius: 4px;
+            border: 1px solid #4f7cc0; background: #0f1520; color: #fff; outline: none; width: 220px; }
   .node { cursor: pointer; } .node .selring { opacity: 0; } .node.sel .selring { opacity: 1; }
   #tools { position: absolute; display: none; gap: 4px; padding: 4px; border-radius: 8px; transform: translateX(-50%); z-index: 2;
            background: rgba(14,20,32,.96); border: 1px solid #3a5280; box-shadow: 0 6px 20px rgba(0,0,0,.5); white-space: nowrap; }
@@ -108,7 +118,7 @@
 <header>
   <div><h1 id="title"></h1><p class="sub" id="subtitle"></p></div>
   <div id="stats"></div>
-  <div class="ctl"><span id="hits"></span><input id="search" type="search" placeholder="Search  ( / )" autocomplete="off" aria-label="Search the map"><button id="motion">Motion</button></div>
+  <div class="ctl"><span id="hits"></span><input id="search" type="search" placeholder="Search  ( / )" autocomplete="off" aria-label="Search the map"><button id="arrange" title="Move boxes and zones, then save">Arrange</button><button id="undo" hidden title="Undo (Ctrl+Z)">Undo</button><button id="save" hidden>Save</button><button id="motion">Motion</button></div>
 </header>
 <div id="wrap"><svg id="map"></svg><div id="crumbs"></div><div id="tools" role="toolbar"></div><aside id="drawer" aria-label="Details"></aside><span id="hint">drag to move · pinch or Ctrl+scroll to zoom</span><div id="zoom"><button data-z="in" title="Zoom in">+</button><button data-z="out" title="Zoom out">−</button><button data-z="fit" title="Show the whole map">⤢</button></div></div>
 <div class="legend" id="legend"></div>
@@ -129,7 +139,7 @@ const el = (t, a = {}, p = svg) => { const e = document.createElementNS(NS, t); 
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 // ---------------- placement: free grid (x, y in 20 px units) or the older columns/rows ----------------
-let nodes, edges, byId, free, groups, VW, VH, LEVEL = MAP;
+let nodes, edges, byId, free, groups, VW, VH, LEVEL = MAP, SHIFT = [0, 0];
 const stack = [];                                        // maps we zoomed out of: [{level, view, title}]
 const topById = Object.fromEntries(MAP.nodes.map(n => [n.id, n]));
 function autoLayout() {                                  // inner maps may leave out x/y: columns by kind, wrapped at 6
@@ -162,13 +172,13 @@ function load(M) {
     nodes.forEach(n => { n.x = 2 + n.col * 16; n.y = 4 + n._r * 5; });
   }
   nodes.forEach(n => { n.px = n.x * U; n.py = n.y * U; });
-  groups = (M.groups || []).map((g, i) => { const ms = g.nodes.map(id => byId[id]);
+  groups = (M.groups || []).map((g, i) => { const ms = g.nodes.map(id => byId[id]).filter(Boolean);
     return { ...g, i, x: Math.min(...ms.map(m => m.px)) - 20, y: Math.min(...ms.map(m => m.py)) - 34, x2: Math.max(...ms.map(m => m.px + W)) + 20, y2: Math.max(...ms.map(m => m.py + H)) + 20 }; });
   { // shift everything so the drawing starts at the margin
     const top = !free && M.columns ? 30 : 0;
     const mx = Math.min(...nodes.map(n => n.px), ...groups.map(g => g.x)), my = Math.min(...nodes.map(n => n.py), ...groups.map(g => g.y));
     const dx = Math.round((PAD - mx) / G) * G, dy = Math.round((PAD + top - my) / G) * G;   // keep boxes on the routing grid: no slanted wire ends
-    nodes.forEach(n => { n.px += dx; n.py += dy; }); groups.forEach(g => { g.x += dx; g.x2 += dx; g.y += dy; g.y2 += dy; });
+    nodes.forEach(n => { n.px += dx; n.py += dy; }); groups.forEach(g => { g.x += dx; g.x2 += dx; g.y += dy; g.y2 += dy; }); SHIFT = [dx, dy];
   }
   nodes.forEach(n => n.gmask = groups.filter(g => g.nodes.includes(n.id)).reduce((m, g) => m | (1 << g.i), 0));
   VW = Math.max(...nodes.map(n => n.px + W), ...groups.map(g => g.x2)) + PAD;
@@ -333,15 +343,21 @@ function render(t) {
     el("text", { x: xs[0] + W / 2, y: 30, class: "col", "text-anchor": "middle" }).textContent = c.toUpperCase(); });
 
   groups.forEach(g => {
-    const tone = C(g.kind || "file"), w = g.x2 - g.x, h = g.y2 - g.y;
+    if (!isFinite(g.x)) return;
+    const tone = C(g.kind || "file"), w = g.x2 - g.x, h = g.y2 - g.y, z = el("g", { class: "zone", "data-gi": g.i }); g._g = z;
+    let lab;
     if (F) {
-      el("rect", { x: g.x, y: g.y, width: w, height: h, rx: 2, fill: "rgba(0,0,0,.25)", stroke: "#8a6a3a", "stroke-width": 1.5, "stroke-dasharray": "10 4" });
-      el("rect", { x: g.x, y: g.y, width: Math.min(w, g.label.length * 8.4 + 26), height: 20, fill: "#3b3732", stroke: "#8a6a3a", "stroke-width": 1.5 });
+      el("rect", { class: "zframe", x: g.x, y: g.y, width: w, height: h, rx: 2, fill: "rgba(0,0,0,.25)", stroke: "#8a6a3a", "stroke-width": 1.5, "stroke-dasharray": "10 4" }, z);
+      lab = el("g", { class: "glabel", "data-gi": g.i }, z);
+      el("rect", { x: g.x, y: g.y, width: Math.min(w, g.label.length * 8.4 + 26), height: 20, fill: "#3b3732", stroke: "#8a6a3a", "stroke-width": 1.5 }, lab);
     } else {
-      el("rect", { x: g.x, y: g.y, width: w, height: h, rx: 12, fill: tone, "fill-opacity": .05, stroke: tone, "stroke-opacity": .5, "stroke-dasharray": "7 5" });
-      el("rect", { x: g.x, y: g.y, width: w, height: 22, rx: 12, fill: tone, "fill-opacity": .14 });
+      el("rect", { class: "zframe", x: g.x, y: g.y, width: w, height: h, rx: 12, fill: tone, "fill-opacity": .05, stroke: tone, "stroke-opacity": .5, "stroke-dasharray": "7 5" }, z);
+      lab = el("g", { class: "glabel", "data-gi": g.i }, z);
+      el("rect", { x: g.x, y: g.y, width: w, height: 22, rx: 12, fill: tone, "fill-opacity": .14 }, lab);
     }
-    el("text", { x: g.x + 12, y: g.y + 15, fill: F ? "#ffcc66" : tone, "font-size": 11, "font-weight": 700, "letter-spacing": ".12em" }).textContent = g.label.toUpperCase();
+    el("text", { x: g.x + 12, y: g.y + 15, fill: F ? "#ffcc66" : tone, "font-size": 11, "font-weight": 700, "letter-spacing": ".12em" }, lab).textContent = g.label.toUpperCase();
+    lab.addEventListener("click", e => { if (!arrange || dragged) return; e.stopPropagation(); selectZone(g.i); });
+    lab.addEventListener("dblclick", e => { if (!arrange) return; e.stopPropagation(); startRename(g.i); });
   });
 
   const eg = el("g");
@@ -405,6 +421,9 @@ function render(t) {
     g.addEventListener("mouseenter", () => { if (!pts.size && !traceId) hover(n); });
     g.addEventListener("mouseleave", () => traceId ? null : pinned ? hover(byId[pinned]) : clearHover());
     g.addEventListener("click", e => { e.stopPropagation(); if (dragged) return;
+      if (arrange) { if (e.shiftKey || e.metaKey) { multi.has(n.id) ? multi.delete(n.id) : multi.add(n.id); if (!multi.size) return select(null); }
+                     else multi = new Set([n.id]);
+                     return select(byId[[...multi].includes(n.id) ? n.id : [...multi][0]]); }
       if (pinned === n.id) mainAction(n); else select(n); });
   });
   const used = new Set(nodes.map(n => n.kind)), usedE = new Set(edges.map(e => e.kind));
@@ -423,15 +442,19 @@ function clearHover() { svg.querySelectorAll(".dim").forEach(x => x.classList.re
 // Gestures: hover = preview, click/tap = select (+ toolbar), click again / double-click / Enter = main action,
 // drag on the canvas = pan, Esc = deselect (or go back), Backspace = go back.
 const ACTIONS = [
-  { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => n.kids > 0, run: n => enter(n), main: () => true },
-  { id: "trace", label: n => traceId === n.id ? "Stop trace" : "Trace", when: n => edges.some(e => e.from === n.id || e.to === n.id),
+  { id: "open", label: n => `Open ▸ ${n.kids}`, when: n => !arrange && n.kids > 0, run: n => enter(n), main: () => true },
+  { id: "trace", label: n => traceId === n.id ? "Stop trace" : "Trace", when: n => !arrange && edges.some(e => e.from === n.id || e.to === n.id),
     run: n => traceId === n.id ? clearTrace() : trace(n) },
+  { id: "zone-new", label: () => multi.size > 1 ? `New zone (${multi.size})` : "New zone", when: () => arrange, run: () => newZone() },
+  { id: "zone-leave", label: () => "Leave zone", when: n => arrange && multi.size <= 1 && zoneOf(n.id) >= 0, run: n => leaveZone(n.id) },
   { id: "details", label: n => drawerFor(n) ? "Hide details" : "Details", when: () => true, run: n => drawerFor(n) ? closeDrawer() : openDetails(n), main: n => !n.kids },
 ];
 const tools = document.getElementById("tools");
 function select(n) {
-  pinned = n ? n.id : null;
+  pinned = n ? n.id : null; pinnedZone = null; svg.querySelectorAll(".zone.zsel").forEach(x => x.classList.remove("zsel"));
   svg.querySelectorAll(".node.sel").forEach(x => x.classList.remove("sel"));
+  if (!n) multi = new Set(); else if (!arrange) multi = new Set([n.id]);
+  multi.forEach(id => byId[id]?._g?.classList.add("sel"));
   if (!n) { tools.classList.remove("on"); if (drawerMode === "node") closeDrawer(); if (traceId) clearTrace(); return; }
   n._g.classList.add("sel");
   if (traceId) trace(n); else hover(n);                     // an active trace follows the selection
@@ -443,11 +466,177 @@ function select(n) {
 }
 function mainAction(n) { const a = ACTIONS.find(a => a.when(n) && a.main && a.main(n)); if (a) a.run(n); }
 function placeTools() {
+  if (pinnedZone !== null && groups[pinnedZone] && tools.classList.contains("on")) { const g = groups[pinnedZone];
+    tools.style.left = Math.min(Math.max((g.x + 90 - view.x) * view.s, 80), wrap.clientWidth - 80) + "px";
+    tools.style.top = Math.max(4, (g.y - view.y) * view.s - (tools.offsetHeight || 38) + 8) + "px"; return; }
   const n = pinned && byId[pinned]; if (!n || !tools.classList.contains("on")) return;
   const x = (n.px + W / 2 - view.x) * view.s, top = (n.py - view.y) * view.s;
   tools.style.left = Math.min(Math.max(x, 80), wrap.clientWidth - 80) + "px";
   const h = tools.offsetHeight || 38, lap = Math.min(14, H * view.s * .3);       // sits over the box's top edge
   tools.style.top = (top - h + lap > 4 ? top - h + lap : (n.py + H - view.y) * view.s - lap) + "px";
+}
+
+// ---------------- arrange: move boxes and zones, edit zones, undo, save ----------------
+// Changes go into the map in memory (LEVEL); Save writes box positions and zones back to map.json through the board
+// (or downloads map.json when the page is not served by the board). Only the top level can be arranged for now.
+const BOARD_TOKEN = /*BOARD_TOKEN*/"";
+let arrange = false, multi = new Set(), pinnedZone = null, item = null, dirty = false;
+const undoStack = [], hintEl = document.getElementById("hint"), hintText = hintEl.textContent;
+const canSave = () => location.protocol.startsWith("http") && !!BOARD_TOKEN;
+const zoneOf = id => (LEVEL.groups || []).findIndex(g => g.nodes.includes(id));
+function arrangeBtn() {
+  const b = document.getElementById("arrange"); b.disabled = stack.length > 0;
+  b.title = stack.length ? "Arrange works on the top level of the map" : "Move boxes and zones, then save";
+}
+function setArrange(on) {
+  arrange = on; document.body.classList.toggle("arranging", on);
+  document.getElementById("arrange").classList.toggle("on", on);
+  document.getElementById("undo").hidden = !on; document.getElementById("save").hidden = !on && !dirty;
+  hintEl.textContent = on ? "drag boxes or zone labels · Shift-click selects several · double-click a zone label to rename · Ctrl+Z undo" : hintText;
+  if (on) { if (traceId) clearTrace(); materialize(); }
+  select(null); saveBtn();
+}
+function materialize() {                                  // old column maps: write the computed grid positions into the map once
+  if (LEVEL.nodes.every(n => n.x !== undefined && n.y !== undefined)) return;
+  for (const n of LEVEL.nodes) { const c = byId[n.id]; n.x = c.x; n.y = c.y; delete n.col; delete n.row; }
+  delete LEVEL.columns; reload();
+}
+function snapshot() { return { pos: LEVEL.nodes.map(n => [n.id, n.x, n.y]), groups: JSON.parse(JSON.stringify(LEVEL.groups || [])) }; }
+function change(fn) { undoStack.push(snapshot()); if (undoStack.length > 100) undoStack.shift(); fn(); dirty = true; reload(); saveBtn(); }
+function undo() {
+  const s = undoStack.pop(); if (!s) return;
+  const at = Object.fromEntries(s.pos.map(p => [p[0], p]));
+  for (const n of LEVEL.nodes) if (at[n.id]) { n.x = at[n.id][1]; n.y = at[n.id][2]; }
+  LEVEL.groups = s.groups; dirty = true; reload(); saveBtn();
+}
+function reload() {                                       // redraw after a change, keeping the view still
+  const old = SHIFT.slice(), keep = pinned, keepZ = pinnedZone, keepMulti = new Set(multi);
+  LEVEL.groups = (LEVEL.groups || []).filter(g => g.nodes.length);
+  load(LEVEL); render(theme);
+  view.x += SHIFT[0] - old[0]; view.y += SHIFT[1] - old[1]; applyView();
+  multi = new Set([...keepMulti].filter(id => byId[id]));
+  if (keepZ !== null && groups[keepZ]) selectZone(keepZ); else if (keep && byId[keep]) select(byId[keep]); else select(null);
+}
+function saveBtn() {
+  const b = document.getElementById("save");
+  b.hidden = !arrange && !dirty; b.classList.toggle("dirty", dirty);
+  b.textContent = dirty ? (canSave() ? "Save" : "Download map.json") : "Saved";
+  b.disabled = !dirty; document.getElementById("undo").disabled = !undoStack.length;
+}
+async function save() {
+  const b = document.getElementById("save");
+  const body = { positions: Object.fromEntries(LEVEL.nodes.map(n => [n.id, [n.x, n.y]])),
+                 groups: (LEVEL.groups || []).map(g => ({ label: g.label, nodes: g.nodes, kind: g.kind || "file" })) };
+  if (!canSave()) {                                       // saved copy of the map: hand the user the file
+    const m = JSON.parse(JSON.stringify(MAP)); delete m._board; delete m.drift; m.nodes.forEach(n => delete n.stale);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(m, null, 1)], { type: "application/json" }));
+    a.download = "map.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    dirty = false; saveBtn(); b.textContent = "Downloaded: replace your map.json"; return;
+  }
+  b.disabled = true; b.textContent = "Saving…";
+  try {
+    const r = await fetch("save", { method: "POST", headers: { "Content-Type": "application/json", "X-Board-Token": BOARD_TOKEN }, body: JSON.stringify(body) });
+    const t = await r.text(); if (!r.ok) throw new Error(t || r.status);
+    dirty = false; saveBtn(); b.textContent = "Saved ✓";
+  } catch (err) { b.disabled = false; b.textContent = "Save failed: retry"; b.title = String(err.message || err); }
+}
+document.getElementById("arrange").onclick = () => setArrange(!arrange);
+document.getElementById("undo").onclick = () => undo();
+document.getElementById("save").onclick = () => save();
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// zones
+function selectZone(gi) {
+  select(null); pinnedZone = gi; const g = groups[gi]; if (!g) return;
+  g._g?.classList.add("zsel");
+  tools.innerHTML = `<button data-z="rename">Rename</button><button data-z="colour">Colour</button><button data-z="ungroup">Ungroup</button>`;
+  tools.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation();
+    if (b.dataset.z === "rename") startRename(gi);
+    if (b.dataset.z === "colour") change(() => { const ks = Object.keys(KINDS), k = LEVEL.groups[gi].kind || "file"; LEVEL.groups[gi].kind = ks[(ks.indexOf(k) + 1) % ks.length]; });
+    if (b.dataset.z === "ungroup") { change(() => LEVEL.groups.splice(gi, 1)); select(null); } });
+  tools.classList.add("on"); placeTools();
+}
+function newZone() {
+  const ids = multi.size ? [...multi] : [pinned];
+  const count = {}; ids.forEach(id => count[byId[id].kind] = (count[byId[id].kind] || 0) + 1);
+  const kind = Object.entries(count).sort((a, b) => b[1] - a[1])[0][0];
+  change(() => { LEVEL.groups = LEVEL.groups || []; LEVEL.groups.forEach(g => g.nodes = g.nodes.filter(id => !ids.includes(id)));
+                 LEVEL.groups.push({ label: "New zone", nodes: ids, kind }); });
+  const gi = LEVEL.groups.findIndex(g => g.nodes.includes(ids[0]));
+  selectZone(gi); startRename(gi);
+}
+function leaveZone(id) { change(() => LEVEL.groups.forEach(g => g.nodes = g.nodes.filter(x => x !== id))); }
+function startRename(gi) {
+  const g = groups[gi]; if (!g) return; document.getElementById("rename")?.remove();
+  const inp = document.createElement("input"); inp.id = "rename"; inp.value = LEVEL.groups[gi].label; inp.maxLength = 40;
+  inp.style.left = Math.max(4, (g.x - view.x) * view.s) + "px"; inp.style.top = Math.max(4, (g.y - view.y) * view.s - 2) + "px";
+  wrap.appendChild(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = ok => { if (done) return; done = true; const v = inp.value.trim(); inp.remove();
+    if (ok && v && v !== LEVEL.groups[gi].label) change(() => LEVEL.groups[gi].label = v); };
+  inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); });
+  inp.addEventListener("blur", () => finish(true));
+}
+
+// dragging
+function frames(exclude) {                                // each zone's frame from the boxes that stay put
+  return groups.map(g => { const ms = g.nodes.filter(id => !exclude.has(id)).map(id => byId[id]).filter(Boolean);
+    return ms.length ? [Math.min(...ms.map(m => m.px)) - 20, Math.min(...ms.map(m => m.py)) - 34, Math.max(...ms.map(m => m.px + W)) + 20, Math.max(...ms.map(m => m.py + H)) + 20] : null; });
+}
+const inside = (f, x, y, pad = 0) => f && x >= f[0] - pad && x <= f[2] + pad && y >= f[1] - pad && y <= f[3] + pad;
+function startItemDrag(e) {
+  const nodeEl = e.target.closest(".node"), lab = e.target.closest(".glabel");
+  if (!nodeEl && !lab) return false;
+  let ids, gi = null;
+  if (lab) { gi = +lab.dataset.gi; ids = groups[gi].nodes.filter(id => byId[id]); }
+  else { const id = nodeEl.dataset.id; ids = multi.has(id) && multi.size > 1 ? [...multi] : [id]; }
+  const moving = new Set(ids);
+  item = { pid: e.pointerId, sx: e.clientX, sy: e.clientY, gi, ids, moving, start: ids.map(id => [byId[id].px, byId[id].py]),
+           frames: frames(moving), du: 0, dv: 0, target: null, bad: false };
+  moved = 0; dragged = false;
+  return true;
+}
+function moveItem(e) {
+  const dx = (e.clientX - item.sx) / view.s, dy = (e.clientY - item.sy) / view.s;
+  moved = Math.abs(e.clientX - item.sx) + Math.abs(e.clientY - item.sy);
+  if (moved <= 5 && !dragged) return;
+  if (!dragged) { dragged = true; try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
+    item.ids.forEach(id => byId[id]._g.classList.add("moving"));
+    edges.forEach(ed => { if (item.moving.has(ed.from) || item.moving.has(ed.to)) ed._g.classList.add("moving"); }); }
+  item.du = Math.round(dx / U) * U; item.dv = Math.round(dy / U) * U;      // whole grid steps
+  let bad = false;
+  item.ids.forEach((id, k) => { const n = byId[id], x = item.start[k][0] + item.du, y = item.start[k][1] + item.dv;
+    n._g.setAttribute("transform", `translate(${x},${y})`);
+    for (const o of nodes) if (!item.moving.has(o.id) && x < o.px + W + 20 && o.px < x + W + 20 && y < o.py + H + 20 && o.py < y + H + 20) bad = true; });
+  item.bad = bad; item.ids.forEach(id => byId[id]._g.classList.toggle("bad", bad));
+  if (item.gi !== null) { groups[item.gi]._g?.setAttribute("transform", `translate(${item.du},${item.dv})`); return; }
+  // one box: which zone would it end up in?
+  item.target = null;
+  if (item.ids.length === 1) {
+    const id = item.ids[0], cx = item.start[0][0] + item.du + W / 2, cy = item.start[0][1] + item.dv + H / 2, own = groups.findIndex(g => g.nodes.includes(id));
+    let best = null, area = Infinity;
+    item.frames.forEach((f, gi) => { if (gi !== own && inside(f, cx, cy)) { const a = (f[2] - f[0]) * (f[3] - f[1]); if (a < area) { area = a; best = gi; } } });
+    if (best !== null) item.target = best;
+    else if (own >= 0) item.target = !item.frames[own] || inside(item.frames[own], cx, cy, 150) ? own : -1;   // -1: leaves its zone
+    else item.target = -1;
+  }
+  svg.querySelectorAll(".zone.drop").forEach(z => z.classList.remove("drop"));
+  if (item.target !== null && item.target >= 0) groups[item.target]._g?.classList.add("drop");
+}
+function dropItem(cancel) {
+  const it = item; item = null;
+  svg.querySelectorAll(".zone.drop").forEach(z => z.classList.remove("drop"));
+  if (!dragged) return;                                   // a plain click: the click handlers take it from here
+  setTimeout(() => { dragged = false; }, 60);             // the redraw below can remove the element the click would land on
+  if (cancel || it.bad || (!it.du && !it.dv && (it.target === null || it.target === groups.findIndex(g => g.nodes.includes(it.ids[0]))))) { reload(); return; }
+  change(() => {
+    for (const id of it.ids) { const n = LEVEL.nodes.find(m => m.id === id), c = byId[id];
+      n.x = Math.round((c.px + it.du - SHIFT[0]) / U); n.y = Math.round((c.py + it.dv - SHIFT[1]) / U); }
+    if (it.gi === null && it.ids.length === 1 && it.target !== null) {
+      const id = it.ids[0], own = LEVEL.groups ? LEVEL.groups.findIndex(g => g.nodes.includes(id)) : -1;
+      if (it.target !== own) { LEVEL.groups.forEach(g => g.nodes = g.nodes.filter(x => x !== id)); if (it.target >= 0) LEVEL.groups[it.target].nodes.push(id); }
+    }
+  });
 }
 
 // ---------------- trace: everything a box depends on (upstream) and affects (downstream) ----------------
@@ -572,11 +761,11 @@ document.getElementById("legend").addEventListener("click", e => {
 });
 let entering = false;
 function enter(n) {
-  if (entering) return; entering = true; select(null);
+  if (entering) return; entering = true; if (arrange) setArrange(false); select(null);
   const back = { level: LEVEL, view: { ...view }, title: LEVEL.title || MAP.title };
   crossFade(() => {
     stack.push(back); traceId = null; kindFilter.clear(); edgeFilter.clear(); load({ ...n.inner, title: n.title });
-    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); entering = false;
+    sbox.value = ""; hitAt = -1; render(theme); fit(); crumbs(); arrangeBtn(); entering = false;
   });
 }
 function crossFade(swap) {                               // fade out, swap the drawing, fade in
@@ -589,10 +778,12 @@ function up(k = 1) {
   if (!stack.length) return;
   let s; for (let i = 0; i < k && stack.length; i++) s = stack.pop();
   select(null);
-  crossFade(() => { traceId = null; kindFilter.clear(); edgeFilter.clear(); load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); });
+  crossFade(() => { traceId = null; kindFilter.clear(); edgeFilter.clear(); load(s.level); sbox.value = ""; hitAt = -1; render(theme); Object.assign(view, s.view); applyView(); crumbs(); arrangeBtn(); });
 }
 document.addEventListener("keydown", e => {
-  if (document.activeElement === sbox) return;
+  if (document.activeElement === sbox || document.activeElement?.id === "rename") return;
+  if (arrange && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
+  if (e.key === "Escape" && pinnedZone !== null) { select(null); return; }
   if (e.key === "Enter" && pinned) { e.preventDefault(); mainAction(byId[pinned]); return; }
   if (e.key === "Escape" && drawer.classList.contains("on")) { closeDrawer(); return; }
   if (e.key === "Escape" && traceId) { clearTrace(); refreshTools(byId[pinned] || {}); return; }
@@ -655,10 +846,12 @@ function zoomAt(f, cx, cy) {                            // cx, cy: point in the 
 }
 wrap.addEventListener("pointerdown", e => {
   if (!pts.size) { moved = 0; dragged = false; }
-  if (e.target.closest("#zoom, #drawer, #tools, #crumbs")) return;
+  if (e.target.closest("#zoom, #drawer, #tools, #crumbs, #rename")) return;
+  if (arrange && !pts.size && startItemDrag(e)) return;
   pts.set(e.pointerId, [e.clientX, e.clientY]);
 });
 wrap.addEventListener("pointermove", e => {
+  if (item && item.pid === e.pointerId) return moveItem(e);
   if (!pts.has(e.pointerId)) return;
   const [px, py] = pts.get(e.pointerId), dx = e.clientX - px, dy = e.clientY - py;
   pts.set(e.pointerId, [e.clientX, e.clientY]);
@@ -675,10 +868,10 @@ wrap.addEventListener("pointermove", e => {
     pinch = d;
   }
 });
-const lift = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) wrap.classList.remove("drag"); };
+const lift = e => { if (item && item.pid === e.pointerId) { dropItem(e.type === "pointercancel"); return; } pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) wrap.classList.remove("drag"); };
 wrap.addEventListener("pointerup", lift); wrap.addEventListener("pointercancel", lift);
 wrap.addEventListener("click", e => { if (dragged && !e.target.closest("#zoom, #drawer, #tools")) { e.stopPropagation(); e.preventDefault(); } dragged = false; }, true);
-svg.addEventListener("click", e => { if (!e.target.closest(".node") && !dragged) { select(null); clearHover(); } });
+svg.addEventListener("click", e => { if (!e.target.closest(".node, .glabel") && !dragged) { select(null); clearHover(); } });
 wrap.addEventListener("wheel", e => {                   // plain scrolling keeps scrolling the page
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault(); const r = wrap.getBoundingClientRect();
